@@ -358,3 +358,8 @@ function readDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}

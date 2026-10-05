@@ -24,9 +24,21 @@ export async function GET(
           });
           const updated = {
             ...job,
+            id: job.id,
             status: providerState.status,
+            providerId: job.providerId,
+            providerJobId: job.providerJobId,
+            configuration: job.configuration,
+            createdAt: job.createdAt,
+            retryCount: job.retryCount,
             progress: providerState.progress,
-            resultAsset: providerState.resultAsset,
+            ...(providerState.resultAsset ? {
+              resultAsset: {
+                ...providerState.resultAsset,
+                jobId: job.id,
+                configuration: job.configuration,
+              },
+            } : {}),
             error: providerState.error,
             updatedAt: new Date().toISOString(),
           };

@@ -42,7 +42,7 @@ export class RunPodWanProvider implements GenerationProvider {
 
   async generate(
     configuration: GenerationConfiguration,
-    context?: { ownerId: string },
+    context?: { ownerId: string; jobId?: string },
   ): Promise<GenerationJob> {
     if (!context?.ownerId) throw new Error("AUTHENTICATED_OWNER_REQUIRED");
     if (!this.supports(configuration)) throw new Error("PROVIDER_CAPABILITY_UNAVAILABLE");
@@ -59,7 +59,7 @@ export class RunPodWanProvider implements GenerationProvider {
       throw new Error("RUNPOD_INVALID_SUBMISSION");
     }
     return {
-      id: crypto.randomUUID(),
+      id: context.jobId ?? crypto.randomUUID(),
       status: mapRunPodStatus(data.status),
       providerId: this.id,
       providerJobId: data.id,

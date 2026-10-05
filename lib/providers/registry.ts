@@ -39,7 +39,7 @@ export interface GenerationProvider {
   capabilities: ProviderCapabilities;
   generate(
     configuration: GenerationConfiguration,
-    context?: { ownerId: string },
+    context?: { ownerId: string; jobId?: string },
   ): Promise<GenerationJob>;
   getJobStatus?(
     providerJobId: string,

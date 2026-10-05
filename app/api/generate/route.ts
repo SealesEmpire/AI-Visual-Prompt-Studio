@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     if (job.id !== id || job.status !== "PENDING") {
       return NextResponse.json({ job }, { status: 200 });
     }
-    const submitted = await provider.generate(job.configuration, { ownerId: user.id });
+    const submitted = await provider.generate(job.configuration, { ownerId: user.id, jobId: job.id });
     const saved = {
       ...job,
       ...submitted,

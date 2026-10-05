@@ -119,7 +119,7 @@ export class OpenAIImageGenerationProvider implements GenerationProvider {
 
   async generate(
     configuration: GenerationConfiguration,
-    context?: { ownerId: string },
+    context?: { ownerId: string; jobId?: string },
   ): Promise<GenerationJob> {
     if (!this.config.imageModel) throw new Error("IMAGE_MODEL_NOT_CONFIGURED");
     if (configuration.mediaType !== "image") throw new Error("UNSUPPORTED_MEDIA_TYPE");
@@ -144,7 +144,7 @@ export class OpenAIImageGenerationProvider implements GenerationProvider {
     if (!response.ok) throw new Error(`IMAGE_PROVIDER_HTTP_${response.status}`);
     const encoded = getImageBase64(data);
     const bytes = Buffer.from(encoded, "base64");
-    const jobId = randomUUID();
+    const jobId = context.jobId ?? randomUUID();
     const storageKey = await assetStorageProvider().store({
       ownerId: context.ownerId,
       assetId: jobId,

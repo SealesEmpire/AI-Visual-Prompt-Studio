@@ -34,7 +34,7 @@ export async function POST(
     if (retry.id !== proposedId) {
       return NextResponse.json({ job: retry }, { status: 200 });
     }
-    const submitted = await provider.generate(retry.configuration, { ownerId: user.id });
+    const submitted = await provider.generate(retry.configuration, { ownerId: user.id, jobId: retry.id });
     const updated = {
       ...retry,
       ...submitted,
