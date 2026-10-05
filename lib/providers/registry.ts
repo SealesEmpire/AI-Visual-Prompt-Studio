@@ -1,24 +1,53 @@
 import type { GenerationConfiguration, GeneratedAsset, GenerationJob } from "@/types/application";
 
-export interface GenerationCapabilities {
+export interface ProviderCapabilities {
   imageGeneration: boolean;
-  videoGeneration: boolean;
+  imageEditing: boolean;
+  textToVideo: boolean;
   imageToVideo: boolean;
   videoToVideo: boolean;
   lora: boolean;
   multipleLoras: boolean;
-  supportedDurations?: number[];
-  supportedResolutions?: Array<{ width: number; height: number }>;
   seed: boolean;
+  negativePrompt: boolean;
   referenceImage: boolean;
+  supportedDurations?: number[];
+  supportedAspectRatios?: string[];
+  supportedResolutions?: string[];
+  supportedModels?: string[];
+}
+
+export type ProviderStatus = "CONFIGURED" | "AVAILABLE" | "UNAVAILABLE" | "ERROR" | "NOT CONFIGURED";
+
+export interface ProviderHealth {
+  id: string;
+  displayName: string;
+  configured: boolean;
+  available: boolean | null;
+  status: ProviderStatus;
+  capabilities: ProviderCapabilities | null;
+  models?: string[];
+  installedPresetIds?: string[];
+  capabilitySource?: "provider_discovery" | "operator_configuration" | "unknown";
+  checkedAt?: string;
+  error?: string;
 }
 
 export interface GenerationProvider {
   id: string;
   displayName: string;
-  capabilities: GenerationCapabilities;
-  generate(configuration: GenerationConfiguration): Promise<GenerationJob>;
-  getAsset(jobId: string): Promise<GeneratedAsset | null>;
+  capabilities: ProviderCapabilities;
+  generate(
+    configuration: GenerationConfiguration,
+    context?: { ownerId: string },
+  ): Promise<GenerationJob>;
+  getJobStatus?(
+    providerJobId: string,
+    context?: { ownerId: string; configuration: GenerationConfiguration },
+  ): Promise<GenerationJob>;
+  cancel?(providerJobId: string): Promise<void>;
+  discover?(): Promise<Pick<ProviderHealth, "available" | "capabilities" | "models" | "installedPresetIds">>;
+  getAsset?(jobId: string): Promise<GeneratedAsset | null>;
 }
 
 export class ProviderRegistry {
@@ -42,3 +71,20 @@ export class ProviderRegistry {
 }
 
 export const providerRegistry = new ProviderRegistry();
+
+export function registerProvider(provider: GenerationProvider): void {
+  providerRegistry.register(provider);
+}
+
+export const unknownProviderCapabilities: ProviderCapabilities = {
+  imageGeneration: false,
+  imageEditing: false,
+  textToVideo: false,
+  imageToVideo: false,
+  videoToVideo: false,
+  lora: false,
+  multipleLoras: false,
+  seed: false,
+  negativePrompt: false,
+  referenceImage: false,
+};

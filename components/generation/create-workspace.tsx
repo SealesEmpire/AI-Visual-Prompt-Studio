@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MediaInput } from "@/components/media/media-input";
 import { PresetSelector } from "@/components/presets/preset-browser";
 import { PromptEditor } from "@/components/prompt/prompt-editor";
 import { browserPromptRepository } from "@/lib/storage/browser-prompts";
-import type { MediaAsset, MediaKind, PromptArtifact } from "@/types/application";
+import type { GenerationJob, MediaAsset, MediaKind, PromptArtifact, VisualAnalysis } from "@/types/application";
 
 type WorkspaceMode = "simple" | "pro";
 type AspectRatio = "16:9" | "1:1" | "9:16";
@@ -23,6 +23,35 @@ export function CreateWorkspace() {
   const [generationError, setGenerationError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isBuildingPrompt, setIsBuildingPrompt] = useState(false);
+  const [analysis, setAnalysis] = useState<VisualAnalysis | undefined>();
+  const [editingIntent, setEditingIntent] = useState<PromptArtifact["editingIntent"]>();
+  const [job, setJob] = useState<GenerationJob | null>(null);
+  const [jobError, setJobError] = useState("");
+  const [backgroundJob, setBackgroundJob] = useState(false);
+
+  useEffect(() => {
+    if (!job || ["COMPLETE", "FAILED", "CANCELLED"].includes(job.status)) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/generation-jobs/${job.id}`, { cache: "no-store" });
+        const result = await response.json() as { job?: GenerationJob; error?: string };
+        if (!response.ok) {
+          if (active) setJobError(result.error ?? "Unable to check generation status.");
+          return;
+        }
+        if (active && result.job) setJob(result.job);
+      } catch {
+        if (active) setJobError("Generation status is temporarily unavailable.");
+      }
+      if (active) timer = setTimeout(poll, 2500);
+    };
+    timer = setTimeout(poll, 2500);
+    return () => { active = false; clearTimeout(timer); };
+  }, [job?.id, job?.status]);
 
   async function savePrompt() {
     if (!prompt.trim()) {
@@ -34,17 +63,86 @@ export function CreateWorkspace() {
       prompt: prompt.trim(),
       goal: goal.trim() || undefined,
       createdAt: new Date().toISOString(),
+      ...(analysis ? { analysis } : {}),
+      ...(editingIntent ? { editingIntent } : {}),
     };
     try {
-      await browserPromptRepository.save(artifact);
-      setSavedMessage("Saved in this browser’s Library.");
+      const response = await fetch("/api/prompts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(artifact),
+      });
+      if (response.ok) {
+        setSavedMessage("Saved to your account Library.");
+      } else {
+        await browserPromptRepository.save(artifact);
+        setSavedMessage("Saved in this browser only. Account persistence is not configured.");
+      }
     } catch {
-      setSavedMessage("Browser storage is unavailable.");
+      try {
+        await browserPromptRepository.save(artifact);
+        setSavedMessage("Saved in this browser only. Account persistence is unavailable.");
+      } catch {
+        setSavedMessage("Prompt storage is unavailable.");
+      }
+    }
+  }
+
+  async function analyzeImage(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    setGenerationError("");
+    setIsAnalyzing(true);
+    try {
+      const dataUrl = await readDataUrl(file);
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mimeType: file.type, dataUrl }),
+      });
+      const result = await response.json() as { analysis?: VisualAnalysis; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "VISUAL_ANALYSIS_FAILED");
+      setAnalysis(result.analysis);
+      setAnalysisOpen(true);
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "VISUAL_ANALYSIS_FAILED");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function buildPrompt() {
+    setGenerationError("");
+    setIsBuildingPrompt(true);
+    try {
+      const response = await fetch("/api/prompts/build", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          shortRequest: idea,
+          goal,
+          outputType: mediaType,
+          ...(analysis ? { analysis } : {}),
+          ...(presetId ? { presetId } : {}),
+          ...(mediaType === "image" ? { aspectRatio } : {}),
+          hasSourceMedia: Boolean(asset),
+        }),
+      });
+      const result = await response.json() as { prompt?: { prompt: string; editingIntent?: PromptArtifact["editingIntent"] }; error?: string };
+      if (!response.ok || !result.prompt) throw new Error(result.error ?? "PROMPT_ARCHITECT_FAILED");
+      setPrompt(result.prompt.prompt);
+      setEditingIntent(result.prompt.editingIntent);
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "PROMPT_ARCHITECT_FAILED");
+    } finally {
+      setIsBuildingPrompt(false);
     }
   }
 
   async function generate() {
     setGenerationError("");
+    setJobError("");
+    setJob(null);
+    setBackgroundJob(false);
     setIsSubmitting(true);
     try {
       const response = await fetch("/api/generate", {
@@ -58,14 +156,47 @@ export function CreateWorkspace() {
           ...(asset ? { referenceAsset: { id: asset.id, name: asset.name, mimeType: asset.mimeType, size: asset.size } } : {}),
         }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { job?: GenerationJob; error?: string };
       if (!response.ok) setGenerationError(result.error ?? "Generation request failed.");
-      else setGenerationError("Generation request accepted. Job status is not yet connected to this workspace.");
+      else if (result.job) setJob(result.job);
     } catch {
       setGenerationError("Generation service is unavailable.");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function cancelJob() {
+    if (!job) return;
+    try {
+      const response = await fetch(`/api/generation-jobs/${job.id}/cancel`, { method: "POST" });
+      const result = await response.json() as { job?: GenerationJob; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "GENERATION_CANCELLATION_FAILED");
+      if (result.job) setJob(result.job);
+    } catch (error) {
+      setJobError(error instanceof Error ? error.message : "GENERATION_CANCELLATION_FAILED");
+    }
+  }
+
+  async function retryJob() {
+    if (!job) return;
+    setJobError("");
+    try {
+      const response = await fetch(`/api/generation-jobs/${job.id}/retry`, { method: "POST" });
+      const result = await response.json() as { job?: GenerationJob; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "GENERATION_RETRY_FAILED");
+      if (result.job) setJob(result.job);
+    } catch (error) {
+      setJobError(error instanceof Error ? error.message : "GENERATION_RETRY_FAILED");
+    }
+  }
+
+  function reuseSettings(configuration: GenerationJob["configuration"]) {
+    setMediaType(configuration.mediaType);
+    setPrompt(configuration.prompt);
+    setPresetId(configuration.presetIds[0] ?? null);
+    if (configuration.aspectRatio) setAspectRatio(configuration.aspectRatio);
+    setGenerationError("");
   }
 
   return (
@@ -81,7 +212,7 @@ export function CreateWorkspace() {
 
         <section className="workflow-card panel">
           <div className="section-title-row"><div><span className="step-index">01</span><h2>Start with a reference</h2></div><span className="optional-label">OPTIONAL</span></div>
-          <MediaInput asset={asset} onChange={setAsset} />
+          <MediaInput asset={asset} onChange={(nextAsset) => { setAsset(nextAsset); setAnalysis(undefined); setEditingIntent(undefined); }} onAnalyze={(file) => void analyzeImage(file)} isAnalyzed={Boolean(analysis)} />
         </section>
 
         <section className="workflow-card panel">
@@ -93,12 +224,12 @@ export function CreateWorkspace() {
           <button type="button" className={`analysis-toggle${analysisOpen ? " open" : ""}`} onClick={() => setAnalysisOpen(!analysisOpen)} aria-expanded={analysisOpen}>
             <span><span className="analysis-icon">◉</span><strong>Visual analysis</strong><small>{asset ? "Media analysis is not connected" : "Add a reference to explore this area"}</small></span><span>{analysisOpen ? "−" : "+"}</span>
           </button>
-          {analysisOpen && <div className="analysis-placeholder"><span className="status-pip" />No AI analysis provider connected. Your reference stays in this browser.</div>}
+          {analysisOpen && <div className={`analysis-placeholder${analysis ? " analysis-result" : ""}`} aria-live="polite">{isAnalyzing ? <><span className="status-pip" />Analyzing image with the configured AI service…</> : analysis ? <><strong>{analysis.summary}</strong><span>{analysis.subjects.join(" · ")}</span><small>{analysis.observations.join(" · ")}</small></> : <><span className="status-pip" />{asset?.mimeType.startsWith("video/") ? "Video analysis is not configured; upload processing is not available." : "Analysis requires an authenticated account and configured AI model."}</>}</div>}
         </section>
 
         <section className="workflow-card panel">
           <div className="section-title-row"><div><span className="step-index">03</span><h2>Build your prompt</h2></div><span className="optional-label">EDITABLE</span></div>
-          <PromptEditor prompt={prompt} onChange={setPrompt} onSave={() => void savePrompt()} savedMessage={savedMessage} />
+          <PromptEditor prompt={prompt} onChange={setPrompt} onSave={() => void savePrompt()} onBuild={() => void buildPrompt()} isBuilding={isBuildingPrompt} savedMessage={savedMessage} />
         </section>
       </section>
 
@@ -141,9 +272,30 @@ export function CreateWorkspace() {
           </button>
           <p className="generate-note">No output is created until a real provider is connected.</p>
           {generationError && <div className="generation-error" role="status">{generationError}</div>}
+          {job && <div className="job-card" aria-live="polite">
+            <div className="job-heading"><span className="status-pip" /><strong>{job.status === "GENERATING" ? "Generating…" : job.status}</strong><button type="button" className="button-quiet" onClick={() => setBackgroundJob(!backgroundJob)}>{backgroundJob ? "Show" : "Background"}</button></div>
+            <p>Provider: {job.providerId ?? "—"} · Model: {job.configuration.modelId ?? "—"}</p>
+            <p>Preset: {job.configuration.presetIds.join(", ") || "Automatic"} · Started {new Date(job.createdAt).toLocaleTimeString()}</p>
+            {typeof job.progress === "number" ? <progress max="100" value={job.progress} aria-label="Provider-reported generation progress" /> : !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) ? <div className="indeterminate-progress" aria-label="Generation in progress" /> : null}
+            {job.status === "COMPLETE" && job.resultAsset && <a className="button-secondary" href={`/api/assets/${job.resultAsset.id}`}>View generated asset</a>}
+            {job.status === "COMPLETE" && <button type="button" className="button-quiet" onClick={() => reuseSettings(job.configuration)}>Reuse settings</button>}
+            {job.status === "FAILED" && <button type="button" className="button-secondary" onClick={() => void retryJob()}>Retry</button>}
+            {!["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) && <button type="button" className="button-quiet" onClick={() => void cancelJob()}>Cancel</button>}
+            {job.error && <p className="job-error">{job.error}</p>}
+            {jobError && <p className="job-error">{jobError}</p>}
+          </div>}
         </section>
         <section className="panel readiness-card"><span className="readiness-icon">◌</span><div><strong>Ready when you are</strong><p>Connect a provider to generate images and video.</p><a href="/settings">View settings <span>→</span></a></div></section>
       </aside>
     </div>
   );
+}
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("IMAGE_READ_FAILED"));
+    reader.onerror = () => reject(new Error("IMAGE_READ_FAILED"));
+    reader.readAsDataURL(file);
+  });
 }

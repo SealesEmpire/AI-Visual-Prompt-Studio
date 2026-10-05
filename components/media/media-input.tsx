@@ -9,12 +9,17 @@ const acceptedTypes = acceptedMediaTypes.join(",");
 export function MediaInput({
   asset,
   onChange,
+  onAnalyze,
+  isAnalyzed = false,
 }: {
   asset: MediaAsset | null;
   onChange: (asset: MediaAsset | null) => void;
+  onAnalyze?: (file: File) => void;
+  isAnalyzed?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<string | null>(null);
+  const fileRef = useRef<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const safePreview = getLocalPreviewUrl(preview);
@@ -39,6 +44,7 @@ export function MediaInput({
     }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+    fileRef.current = file;
     if (inputRef.current) inputRef.current.value = "";
     onChange({
       id: `${file.name}-${file.lastModified}`,
@@ -51,6 +57,7 @@ export function MediaInput({
 
   function remove() {
     setPreviewUrl(null);
+    fileRef.current = null;
     onChange(null);
     if (inputRef.current) inputRef.current.value = "";
   }
@@ -68,7 +75,8 @@ export function MediaInput({
           {safePreview && isVideoMediaType(asset.mimeType) ? <video src={safePreview} controls playsInline /> : safePreview ? <img src={safePreview} alt={`Preview of ${asset.name}`} /> : <span className="field-note">Preview unavailable.</span>}
           <div className="media-preview-meta"><strong>{asset.name}</strong><span>{formatBytes(asset.size)} · {asset.mimeType}</span></div>
           <div className="media-preview-actions"><button type="button" className="button-secondary" onClick={() => inputRef.current?.click()}>Replace</button><button type="button" className="button-quiet" onClick={remove}>Remove</button></div>
-          <p className="field-note">Preview runs in this browser. No media has been uploaded or analyzed.</p>
+          {onAnalyze && <button type="button" className="button-quiet analyze-media-button" disabled={!fileRef.current || isVideoMediaType(asset.mimeType)} onClick={() => { if (fileRef.current) onAnalyze(fileRef.current); }}>Analyze image</button>}
+          <p className="field-note">Preview runs in this browser. Media is {isAnalyzed ? "analyzed by the configured AI provider." : "not uploaded or analyzed."}</p>
         </div>
       ) : (
         <button type="button" className="media-empty" onClick={() => inputRef.current?.click()}>

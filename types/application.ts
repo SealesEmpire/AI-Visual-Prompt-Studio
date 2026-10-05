@@ -18,6 +18,15 @@ export interface PromptArtifact {
   prompt: string;
   goal?: string;
   createdAt: string;
+  analysis?: VisualAnalysis;
+  editingIntent?: {
+    preserve: string[];
+    change: string[];
+    add: string[];
+    remove: string[];
+    style: string[];
+    finalResult: string;
+  };
 }
 
 export interface GenerationConfiguration {
@@ -49,13 +58,47 @@ export interface Project {
 
 export interface GenerationJob {
   id: string;
-  status: "queued" | "running" | "succeeded" | "failed";
+  status:
+    | "PENDING"
+    | "QUEUED"
+    | "SUBMITTING"
+    | "GENERATING"
+    | "PROCESSING"
+    | "COMPLETE"
+    | "FAILED"
+    | "CANCELLED";
   configuration: GenerationConfiguration;
   createdAt: string;
+  updatedAt?: string;
+  providerId?: string;
+  providerJobId?: string;
+  progress?: number;
+  retryCount?: number;
   error?: string;
+  resultAsset?: GeneratedAsset;
 }
 
 export interface GeneratedAsset extends MediaAsset {
+  projectId?: string;
   jobId: string;
+  storageKey?: string;
+  checksum?: string;
+  createdAt?: string;
   configuration: GenerationConfiguration;
+}
+
+export interface VisualAnalysis {
+  mediaType: MediaKind;
+  summary: string;
+  subjects: string[];
+  environment?: string;
+  composition?: string;
+  camera?: string;
+  lighting?: string;
+  color?: string;
+  style?: string;
+  mood?: string;
+  motion?: string;
+  continuity?: string[];
+  observations: string[];
 }

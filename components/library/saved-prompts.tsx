@@ -8,7 +8,20 @@ export function SavedPrompts() {
   const [prompts, setPrompts] = useState<PromptArtifact[]>([]);
 
   useEffect(() => {
-    void browserPromptRepository.list().then(setPrompts);
+    void Promise.all([
+      browserPromptRepository.list(),
+      fetch("/api/prompts", { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) return [];
+          const result = await response.json() as { prompts?: PromptArtifact[] };
+          return result.prompts ?? [];
+        })
+        .catch(() => []),
+    ]).then(([local, remote]) => {
+      const combined = new Map<string, PromptArtifact>();
+      for (const prompt of [...local, ...remote]) combined.set(prompt.id, prompt);
+      setPrompts([...combined.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)));
+    });
   }, []);
 
   if (!prompts.length) {

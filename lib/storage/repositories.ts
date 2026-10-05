@@ -1,18 +1,18 @@
 import type { GenerationJob, Project, PromptArtifact } from "@/types/application";
 
 export interface ProjectRepository {
-  list(): Promise<Project[]>;
-  save(project: Project): Promise<void>;
+  list(ownerId: string): Promise<Project[]>;
+  save(ownerId: string, project: Project): Promise<void>;
 }
 
 export interface PromptRepository {
-  list(): Promise<PromptArtifact[]>;
-  save(prompt: PromptArtifact): Promise<void>;
+  list(ownerId: string): Promise<PromptArtifact[]>;
+  save(ownerId: string, prompt: PromptArtifact): Promise<void>;
 }
 
 export interface GenerationHistoryRepository {
-  list(): Promise<GenerationJob[]>;
-  save(job: GenerationJob): Promise<void>;
+  list(ownerId: string): Promise<GenerationJob[]>;
+  save(ownerId: string, job: GenerationJob): Promise<void>;
 }
 
 export type AssetDestination = "device" | "app_library" | "my_basket";
