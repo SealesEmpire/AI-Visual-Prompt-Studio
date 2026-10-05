@@ -11,6 +11,7 @@ import type {
 } from "@/lib/providers/registry";
 import { createHash, randomUUID } from "node:crypto";
 import { assetStorageProvider } from "@/lib/storage/s3";
+import { validateGeneratedAsset } from "@/lib/media/generated-asset-validation";
 
 const apiBase = "https://api.openai.com/v1";
 
@@ -144,13 +145,10 @@ export class OpenAIImageGenerationProvider implements GenerationProvider {
     if (!response.ok) throw new Error(`IMAGE_PROVIDER_HTTP_${response.status}`);
     const encoded = getImageBase64(data);
     const bytes = Buffer.from(encoded, "base64");
-    if (
-      bytes.length < 8 ||
-      bytes.length > 50 * 1024 * 1024 ||
-      !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    ) {
+    if (bytes.length > 50 * 1024 * 1024) {
       throw new Error("IMAGE_PROVIDER_INVALID_ASSET");
     }
+    await validateGeneratedAsset(bytes, "image/png", "image");
     const jobId = context.jobId ?? randomUUID();
     const storageKey = await assetStorageProvider().store({
       ownerId: context.ownerId,

@@ -24,6 +24,7 @@ Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, r
 - **Image generation:** configure `OPENAI_IMAGE_MODEL` and all S3 variables. The adapter checks configured models with the provider and persists returned image bytes.
 - **RunPod video:** configure the API key, endpoint ID, input-template JSON, capability JSON, and exact allowed output hostnames. Capabilities are operator-declared and must reflect the real endpoint. The optional `RUNPOD_INSTALLED_PRESET_IDS_JSON` allowlist must be verified against the installed backend; preset use is rejected when installation is unknown. The endpoint is health-checked before reporting availability.
 - **Generation worker:** run `npm run worker` in a separate process with `GENERATION_WORKER_URL` and `GENERATION_WORKER_SECRET`. Queued work persists in PostgreSQL; stale ambiguous submissions fail closed rather than being automatically duplicated.
+- Install `ffprobe` on the generation server/worker to verify generated image dimensions and video container duration before storing assets; generation fails closed if it is unavailable.
 - **Security:** `ENCRYPTION_KEY` is reserved for external-storage connection credentials and must be 32 bytes encoded as 64 hex characters.
 
 Provider, auth, database, and storage credentials are not supplied by this repository. Do not consider an integration operational until it has been configured and exercised.

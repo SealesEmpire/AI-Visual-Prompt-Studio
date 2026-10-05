@@ -7,6 +7,7 @@ import type {
 } from "@/lib/providers/registry";
 import { createHash } from "node:crypto";
 import { assetStorageProvider } from "@/lib/storage/s3";
+import { validateGeneratedAsset } from "@/lib/media/generated-asset-validation";
 
 export interface RunPodConfiguration {
   apiKey: string;
@@ -310,6 +311,7 @@ async function storeRunPodResult(
   if (bytes.length === 0 || bytes.length > 500 * 1024 * 1024) {
     throw new Error("RUNPOD_ASSET_SIZE_INVALID");
   }
+  await validateGeneratedAsset(bytes, contentType, context.configuration.mediaType);
   const assetId = crypto.randomUUID();
   const storageKey = await assetStorageProvider().store({
     ownerId: context.ownerId,
