@@ -144,6 +144,13 @@ export class OpenAIImageGenerationProvider implements GenerationProvider {
     if (!response.ok) throw new Error(`IMAGE_PROVIDER_HTTP_${response.status}`);
     const encoded = getImageBase64(data);
     const bytes = Buffer.from(encoded, "base64");
+    if (
+      bytes.length < 8 ||
+      bytes.length > 50 * 1024 * 1024 ||
+      !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    ) {
+      throw new Error("IMAGE_PROVIDER_INVALID_ASSET");
+    }
     const jobId = context.jobId ?? randomUUID();
     const storageKey = await assetStorageProvider().store({
       ownerId: context.ownerId,
@@ -305,7 +312,13 @@ function validatePromptResult(value: unknown, hasSourceMedia: boolean): PromptAr
     throw new Error("AI_PROVIDER_INVALID_PROMPT");
   }
   if (!hasSourceMedia) return { prompt: value.prompt.trim() };
-  if (!isRecord(value.editingIntent) || !isStringArray(value.editingIntent.preserve) || !isStringArray(value.editingIntent.change) || !isStringArray(value.editingIntent.add) || !isStringArray(value.editingIntent.remove) || !isStringArray(value.editingIntent.style) || typeof value.editingIntent.finalResult !== "string") {
+  if (!isRecord(value.editingIntent) ||
+      !isStringArray(value.editingIntent.preserve) || value.editingIntent.preserve.length > 100 ||
+      !isStringArray(value.editingIntent.change) || value.editingIntent.change.length > 100 ||
+      !isStringArray(value.editingIntent.add) || value.editingIntent.add.length > 100 ||
+      !isStringArray(value.editingIntent.remove) || value.editingIntent.remove.length > 100 ||
+      !isStringArray(value.editingIntent.style) || value.editingIntent.style.length > 100 ||
+      typeof value.editingIntent.finalResult !== "string" || value.editingIntent.finalResult.length > 4000) {
     throw new Error("AI_PROVIDER_INVALID_EDITING_INTENT");
   }
   return {
@@ -325,7 +338,8 @@ function getImageBase64(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.data)) throw new Error("IMAGE_PROVIDER_INVALID_RESPONSE");
   const first = value.data[0];
   if (!isRecord(first) || typeof first.b64_json !== "string" ||
-      !/^[A-Za-z0-9+/]+=*$/.test(first.b64_json) || first.b64_json.length > 70_000_000) {
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(first.b64_json) ||
+      first.b64_json.length > 70_000_000 || first.b64_json.length % 4 !== 0) {
     throw new Error("IMAGE_PROVIDER_INVALID_RESPONSE");
   }
   return first.b64_json;

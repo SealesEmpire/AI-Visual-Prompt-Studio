@@ -54,3 +54,10 @@ test("requires a prompt, valid media type, and preset identifier array", () => {
   assert.throws(() => builder.build({ mediaType: "audio", prompt: "scene", presetIds: [] }), /Invalid generation request/);
   assert.doesNotThrow(() => builder.build({ mediaType: "image", prompt: "scene", presetIds: [] }));
 });
+
+test("rejects oversized prompt and unsupported request bounds", () => {
+  assert.throws(() => builder.build({ mediaType: "image", prompt: "p".repeat(20_001), presetIds: [] }), /Invalid generation request/);
+  assert.throws(() => builder.build({ mediaType: "image", prompt: "scene", presetIds: Array(9).fill("anything") }), /Invalid generation request/);
+  assert.throws(() => builder.build({ mediaType: "image", prompt: "scene", presetIds: [], width: 20_000 }), /Invalid width/);
+  assert.throws(() => builder.build({ mediaType: "video", prompt: "scene", presetIds: [], duration: 4_000 }), /Invalid duration/);
+});

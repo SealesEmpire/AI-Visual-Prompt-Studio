@@ -316,7 +316,7 @@ export function CreateWorkspace() {
           <button type="button" className="generate-button" onClick={() => void generate()} disabled={isSubmitting}>
             <span>{isSubmitting ? "Checking provider…" : "Generate"}</span><span>↗</span>
           </button>
-          <p className="generate-note">No output is created until a real provider is connected.</p>
+          <p className="generate-note">Only configured providers can return real generated assets; unavailable integrations fail explicitly.</p>
           {reusedConfiguration && <p className="provider-hint">Reusing {reusedConfiguration.providerId ?? "provider"} / {reusedConfiguration.modelId ?? "default model"}; availability will be checked before submission.</p>}
           {generationError && <div className="generation-error" role="status">{generationError}</div>}
           {job && backgroundJob && !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) && <button type="button" className="button-quiet" onClick={() => setBackgroundJob(false)}>Show background generation</button>}

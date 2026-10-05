@@ -28,8 +28,10 @@ export class GenerationRequestBuilder {
       (input.mediaType !== "image" && input.mediaType !== "video") ||
       typeof input.prompt !== "string" ||
       !input.prompt.trim() ||
+      input.prompt.length > 20_000 ||
       !Array.isArray(input.presetIds) ||
-      input.presetIds.some((id) => typeof id !== "string")
+      input.presetIds.length > 8 ||
+      input.presetIds.some((id) => typeof id !== "string" || id.length > 200)
     ) {
       throw new Error("Invalid generation request");
     }
@@ -78,16 +80,16 @@ export class GenerationRequestBuilder {
       mediaType: input.mediaType,
       prompt: input.prompt.trim(),
       presetIds,
-      ...(optionalString(input.negativePrompt, "negativePrompt")),
+      ...(optionalString(input.negativePrompt, "negativePrompt", 10_000)),
       ...(optionalString(input.providerId, "providerId")),
       ...(optionalString(input.modelId, "modelId")),
       ...(Object.keys(presetVariants).length > 0 ? { presetVariants } : {}),
       ...(presetStrengths ? { presetStrengths } : {}),
       ...(optionalInteger(input.seed, "seed")),
       ...(optionalAspectRatio(input.aspectRatio)),
-      ...(optionalInteger(input.width, "width", 1)),
-      ...(optionalInteger(input.height, "height", 1)),
-      ...(optionalPositiveNumber(input.duration, "duration")),
+      ...(optionalInteger(input.width, "width", 1, 16_384)),
+      ...(optionalInteger(input.height, "height", 1, 16_384)),
+      ...(optionalPositiveNumber(input.duration, "duration", 3_600)),
       ...(parseReferenceAsset(input.referenceAsset)),
     };
     return request;
@@ -103,9 +105,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function optionalString(
   value: unknown,
   field: string,
+  maximum = 200,
 ): Record<string, string> | Record<never, never> {
   if (value === undefined) return {};
-  if (typeof value !== "string") throw new Error(`Invalid ${field}`);
+  if (typeof value !== "string" || value.length > maximum) throw new Error(`Invalid ${field}`);
   return { [field]: value };
 }
 
@@ -113,9 +116,10 @@ function optionalInteger(
   value: unknown,
   field: string,
   minimum = 0,
+  maximum = 16_384,
 ): Record<string, number> | Record<never, never> {
   if (value === undefined) return {};
-  if (!Number.isInteger(value) || (value as number) < minimum) {
+  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
     throw new Error(`Invalid ${field}`);
   }
   return { [field]: value as number };
@@ -124,9 +128,10 @@ function optionalInteger(
 function optionalPositiveNumber(
   value: unknown,
   field: string,
+  maximum: number,
 ): Record<string, number> | Record<never, never> {
   if (value === undefined) return {};
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > maximum) {
     throw new Error(`Invalid ${field}`);
   }
   return { [field]: value };
