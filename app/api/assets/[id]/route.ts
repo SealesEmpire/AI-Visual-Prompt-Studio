@@ -14,12 +14,16 @@ export async function GET(
   if (!pool) return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
   try {
     const result = await pool.query(
+      "SELECT storage_key FROM media_assets WHERE owner_id = $1 AND id = $2",
+      [user.id, id],
+    );
+    const generated = result.rows[0] ? null : await pool.query(
       `SELECT result_asset->>'storageKey' AS storage_key
        FROM generation_jobs
        WHERE owner_id = $1 AND result_asset->>'id' = $2`,
       [user.id, id],
     );
-    const storageKey: unknown = result.rows[0]?.storage_key;
+    const storageKey: unknown = result.rows[0]?.storage_key ?? generated?.rows[0]?.storage_key;
     if (typeof storageKey !== "string") {
       return NextResponse.json({ error: "ASSET_NOT_FOUND" }, { status: 404 });
     }

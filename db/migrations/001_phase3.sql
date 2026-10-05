@@ -73,11 +73,19 @@ CREATE INDEX IF NOT EXISTS generation_jobs_owner_created_idx ON generation_jobs 
 CREATE INDEX IF NOT EXISTS projects_owner_updated_idx ON projects (owner_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS media_assets_owner_created_idx ON media_assets (owner_id, created_at DESC);
 
-ALTER TABLE media_assets
-  DROP CONSTRAINT IF EXISTS media_assets_generation_job_id_fkey;
-ALTER TABLE media_assets
-  ADD CONSTRAINT media_assets_generation_job_id_fkey
-  FOREIGN KEY (generation_job_id) REFERENCES generation_jobs(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'media_assets_generation_job_id_fkey'
+      AND conrelid = 'media_assets'::regclass
+  ) THEN
+    ALTER TABLE media_assets
+      ADD CONSTRAINT media_assets_generation_job_id_fkey
+      FOREIGN KEY (generation_job_id) REFERENCES generation_jobs(id) ON DELETE SET NULL;
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS generation_configurations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

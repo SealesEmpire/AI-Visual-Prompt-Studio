@@ -279,6 +279,12 @@ async function listModels(config: OpenAIConfiguration): Promise<string[]> {
     : [];
 }
 
+export async function testOpenAIConnection(apiKey: string): Promise<{ modelCount: number }> {
+  const models = await listModels({ apiKey });
+  if (models.length === 0) throw new Error("OPENAI_MODEL_DISCOVERY_EMPTY");
+  return { modelCount: models.length };
+}
+
 export function validateVisualAnalysis(
   value: unknown,
   mediaType: "image" | "video" = "image",
