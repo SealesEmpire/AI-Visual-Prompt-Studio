@@ -4,12 +4,19 @@ import { getAuthenticatedUser } from "@/lib/auth/service";
 import { getPostgresPool } from "@/lib/database/postgres";
 import { ConfiguredAssetDeliveryService } from "@/lib/storage/my-basket";
 import type { AssetDestination } from "@/lib/storage/repositories";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 const destinations = ["device", "app_library", "my_basket"] as const;
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
+  try {
+    const limit = await checkRateLimit(user.id, "asset-delivery", 30, 3600);
+    if (!limit.allowed) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+  } catch {
+    return NextResponse.json({ error: "RATE_LIMIT_SERVICE_UNAVAILABLE" }, { status: 503 });
+  }
   let input: unknown;
   try {
     input = await request.json() as unknown;

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import type { ProviderHealth } from "@/lib/providers/registry";
+import { AuthControls } from "@/components/settings/auth-controls";
 
 type DiagnosticTarget = "openai" | "runpod" | "storage" | "database";
 type DiagnosticResult = { status: "PASS" | "FAIL" | "NOT CONFIGURED"; message: string };
 
 export function ProviderStatuses() {
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
-  const [authConfigured, setAuthConfigured] = useState(false);
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
   const [assetStorageConfigured, setAssetStorageConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -20,9 +20,8 @@ export function ProviderStatuses() {
   useEffect(() => {
     void fetch("/api/providers", { cache: "no-store" })
       .then((response) => response.json())
-      .then((result: { providers?: ProviderHealth[]; authConfigured?: boolean; databaseConfigured?: boolean; assetStorageConfigured?: boolean; configuration?: typeof configuration; runpodEndpointId?: string | null }) => {
+      .then((result: { providers?: ProviderHealth[]; databaseConfigured?: boolean; assetStorageConfigured?: boolean; configuration?: Record<string, { state: string; missing: string[]; error?: string }>; runpodEndpointId?: string | null }) => {
         setProviders(result.providers ?? []);
-        setAuthConfigured(result.authConfigured === true);
         setDatabaseConfigured(result.databaseConfigured === true);
         setAssetStorageConfigured(result.assetStorageConfigured === true);
         setConfiguration(result.configuration ?? null);
@@ -63,18 +62,14 @@ export function ProviderStatuses() {
           <div>
             <strong>{provider.displayName}</strong>
             <p>{provider.error ?? (provider.available === true ? "Connectivity verified." : "Connectivity is not verified.")}</p>
-            <small>{provider.id === "runpod-wan" ? `Endpoint: ${endpointId ?? "not configured"} · ` : ""}Capabilities: {provider.capabilities ? Object.entries(provider.capabilities).filter(([, enabled]) => enabled === true).map(([name]) => name).join(", ") || "none reported" : "unknown"}{provider.checkedAt ? ` · Checked ${new Date(provider.checkedAt).toLocaleString()}` : ""}</small>
+            <small>{provider.id === "runpod-wan" ? `Endpoint: ${endpointId ?? "not configured"} · ` : ""}Capabilities: {provider.capabilities ? Object.entries(provider.capabilities).filter(([, enabled]) => enabled === true).map(([name]) => name).join(", ") || "none reported" : "unknown"}{provider.installedPresetIds ? ` · Verified presets: ${provider.installedPresetIds.length}` : " · Preset installation: unknown"}{provider.checkedAt ? ` · Checked ${new Date(provider.checkedAt).toLocaleString()}` : ""}</small>
             <p>{configurationLine(provider.id === "openai" ? "openai" : "runpod")}</p>
             <Diagnostic target={provider.id === "openai" ? "openai" : "runpod"} value={diagnostics[provider.id === "openai" ? "openai" : "runpod"]} testing={testing} onTest={testConnection} />
           </div>
           <span className={`connection-state provider-${provider.status.toLowerCase().replaceAll(" ", "-")}`}>{provider.status}</span>
         </article>
       ))}
-      <article className="panel settings-row">
-        <span className="settings-row-icon">◉</span>
-        <div><strong>Authentication</strong><p>{authConfigured ? "OAuth configured; private data still requires an active session." : "Configure NEXTAUTH_SECRET and Google or GitHub OAuth credentials."}</p></div>
-        <span className="connection-state">{authConfigured ? "CONFIGURED" : "NOT CONFIGURED"}</span>
-      </article>
+      <AuthControls />
       <article className="panel settings-row">
         <span className="settings-row-icon">▤</span>
         <div><strong>Project database</strong><p>{databaseConfigured ? "PostgreSQL is configured; access still requires OAuth." : "Configure DATABASE_URL for private project and job persistence."}</p><p>{configurationLine("database")}</p><Diagnostic target="database" value={diagnostics.database} testing={testing} onTest={testConnection} /></div>

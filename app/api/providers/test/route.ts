@@ -4,6 +4,7 @@ import { getPostgresPool } from "@/lib/database/postgres";
 import { testOpenAIConnection } from "@/lib/providers/openai";
 import { runPodConfigurationFromEnvironment, RunPodWanProvider } from "@/lib/providers/runpod";
 import { assetStorageProvider } from "@/lib/storage/s3";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
@@ -14,6 +15,12 @@ const requiredTables = [
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
+  try {
+    const limit = await checkRateLimit(user.id, "provider-test", 10, 3600);
+    if (!limit.allowed) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+  } catch {
+    return NextResponse.json({ error: "RATE_LIMIT_SERVICE_UNAVAILABLE" }, { status: 503 });
+  }
   let input: unknown;
   try {
     input = await request.json() as unknown;

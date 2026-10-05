@@ -54,6 +54,7 @@ export async function discoverProviderHealth(): Promise<ProviderHealth[]> {
         capabilities: discovery.capabilities,
         capabilitySource: "operator_configuration",
         models: discovery.models,
+        installedPresetIds: discovery.installedPresetIds,
         checkedAt: new Date().toISOString(),
       });
     } catch {

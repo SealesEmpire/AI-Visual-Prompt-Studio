@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "@/lib/auth/service";
 import { generationRequestBuilder } from "@/lib/generation/request-builder";
 import { PostgresGenerationJobRepository } from "@/lib/generation/job-repository";
 import { configuredProviderRegistry } from "@/lib/providers/configured";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
   let configuration;
@@ -41,6 +42,11 @@ export async function POST(request: Request) {
   }
   if (configuration.presetIds.length && !provider.capabilities.lora) {
     return NextResponse.json({ error: "SELECTED PROVIDER DOES NOT SUPPORT PRESETS" }, { status: 400 });
+  }
+  if (configuration.presetIds.length &&
+      (!provider.installedPresetIds ||
+        configuration.presetIds.some((presetId) => !provider.installedPresetIds!.includes(presetId)))) {
+    return NextResponse.json({ error: "PRESET_AVAILABILITY_UNKNOWN_OR_UNAVAILABLE" }, { status: 409 });
   }
   if (configuration.presetIds.length > 1 && !provider.capabilities.multipleLoras) {
     return NextResponse.json({ error: "SELECTED PROVIDER DOES NOT SUPPORT MULTIPLE PRESETS" }, { status: 400 });
@@ -92,6 +98,13 @@ export async function POST(request: Request) {
   };
 
   try {
+    const limit = await checkRateLimit(user.id, "generation", 20, 3600);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "RATE_LIMITED" }, {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      });
+    }
     const job = await repository.create(user.id, pending, idempotencyKey);
     return NextResponse.json({ job: safeJob(job) }, { status: job.id === id ? 202 : 200 });
   } catch (error) {

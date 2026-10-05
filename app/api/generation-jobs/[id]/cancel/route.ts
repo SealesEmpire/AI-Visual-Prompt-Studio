@@ -22,8 +22,17 @@ export async function POST(
       if (!provider?.cancel) return NextResponse.json({ error: "PROVIDER_CANCELLATION_UNSUPPORTED" }, { status: 409 });
       await provider.cancel(job.providerJobId);
     }
+    const pool = (await import("@/lib/database/postgres")).getPostgresPool();
+    if (!pool) return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
     const cancelled = { ...job, status: "CANCELLED" as const, updatedAt: new Date().toISOString() };
-    await repository.save(user.id, cancelled);
+    const updated = await pool.query(
+      `UPDATE generation_jobs
+       SET status = 'CANCELLED', locked_at = NULL, locked_by = NULL, updated_at = now()
+       WHERE owner_id = $1 AND id = $2 AND status NOT IN ('COMPLETE', 'FAILED', 'CANCELLED')
+       RETURNING id`,
+      [user.id, id],
+    );
+    if (updated.rowCount !== 1) return NextResponse.json({ error: "GENERATION_JOB_NOT_CANCELLABLE" }, { status: 409 });
     return NextResponse.json({ job: cancelled });
   } catch {
     return NextResponse.json({ error: "GENERATION_JOB_CANCELLATION_FAILED" }, { status: 502 });

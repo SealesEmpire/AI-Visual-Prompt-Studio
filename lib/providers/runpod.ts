@@ -14,6 +14,7 @@ export interface RunPodConfiguration {
   inputTemplate: Record<string, unknown>;
   capabilities: ProviderCapabilities;
   assetHosts: string[];
+  installedPresetIds: string[];
 }
 
 export class RunPodWanProvider implements GenerationProvider {
@@ -34,6 +35,7 @@ export class RunPodWanProvider implements GenerationProvider {
     return {
       available: true,
       capabilities: this.capabilities,
+      installedPresetIds: this.config.installedPresetIds,
       ...(this.capabilities.supportedModels
         ? { models: this.capabilities.supportedModels }
         : {}),
@@ -141,6 +143,7 @@ export function runPodConfigurationFromEnvironment(): RunPodConfiguration | null
   const endpointId = process.env.RUNPOD_ENDPOINT_ID;
   const inputTemplate = process.env.RUNPOD_INPUT_TEMPLATE;
   const rawCapabilities = process.env.RUNPOD_CAPABILITIES_JSON;
+  const rawInstalledPresets = process.env.RUNPOD_INSTALLED_PRESET_IDS_JSON;
   const assetHosts = (process.env.RUNPOD_ASSET_HOSTS ?? "").split(",").map((host) => host.trim()).filter(Boolean);
   if (!apiKey || !endpointId || !inputTemplate || !rawCapabilities || assetHosts.length === 0) return null;
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(endpointId)) return null;
@@ -153,6 +156,13 @@ export function runPodConfigurationFromEnvironment(): RunPodConfiguration | null
     return null;
   }
   if (!isRecord(template) || !isRecord(capabilities)) return null;
+  let installedPresetIds: unknown = [];
+  try {
+    installedPresetIds = rawInstalledPresets ? JSON.parse(rawInstalledPresets) : [];
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(installedPresetIds) || installedPresetIds.some((id) => typeof id !== "string" || id.length > 200)) return null;
   const capabilityKeys = [
     "imageGeneration",
     "imageEditing",
@@ -182,6 +192,7 @@ export function runPodConfigurationFromEnvironment(): RunPodConfiguration | null
     endpointId,
     inputTemplate: template,
     assetHosts,
+    installedPresetIds,
     capabilities: capabilities as unknown as ProviderCapabilities,
   };
 }

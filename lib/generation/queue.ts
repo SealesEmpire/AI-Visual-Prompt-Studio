@@ -1,11 +1,12 @@
 import "server-only";
 import type { GenerationJob } from "@/types/application";
 import { getPostgresPool } from "@/lib/database/postgres";
-import { PostgresGenerationJobRepository } from "@/lib/generation/job-repository";
+import { assetStorageProvider } from "@/lib/storage/s3";
 
 export interface ClaimedGeneration {
   ownerId: string;
   attemptCount: number;
+  workerId: string;
   job: GenerationJob;
 }
 
@@ -48,6 +49,7 @@ export class PostgresGenerationQueue {
       return {
         ownerId: String(row.owner_id),
         attemptCount,
+        workerId,
         job: {
           id: String(row.id),
           providerId: typeof row.provider_id === "string" ? row.provider_id : undefined,
@@ -70,33 +72,91 @@ export class PostgresGenerationQueue {
   }
 
   async complete(claim: ClaimedGeneration, job: GenerationJob): Promise<void> {
-    await new PostgresGenerationJobRepository().save(claim.ownerId, job);
     const pool = getPostgresPool();
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
-    await pool.query(
-      `UPDATE generation_jobs
-       SET locked_at = NULL, locked_by = NULL, next_retry_at = now()
-       WHERE id = $1 AND owner_id = $2`,
-      [job.id, claim.ownerId],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE generation_jobs
+         SET provider_id = $4, provider_job_id = $5, status = $6,
+             configuration = $7::jsonb, result_asset = $8::jsonb,
+             progress = $9, error = $10, retry_count = $11,
+             locked_at = NULL, locked_by = NULL, next_retry_at = now(), updated_at = now()
+         WHERE id = $1 AND owner_id = $2 AND locked_by = $3 AND status = 'SUBMITTING'
+         RETURNING id`,
+        [
+          job.id,
+          claim.ownerId,
+          claim.workerId,
+          job.providerId ?? null,
+          job.providerJobId ?? null,
+          job.status,
+          JSON.stringify(job.configuration),
+          job.resultAsset ? JSON.stringify(job.resultAsset) : null,
+          job.progress ?? null,
+          job.error ?? null,
+          job.retryCount ?? 0,
+        ],
+      );
+      if (updated.rowCount !== 1) throw new Error("GENERATION_JOB_NO_LONGER_CLAIMED");
+      if (job.resultAsset) {
+        await client.query(
+          `INSERT INTO media_assets
+            (id, owner_id, project_id, generation_job_id, type, mime_type, storage_key, size, checksum)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            job.resultAsset.id,
+            claim.ownerId,
+            job.configuration.projectId ?? null,
+            job.id,
+            job.configuration.mediaType,
+            job.resultAsset.mimeType,
+            job.resultAsset.storageKey,
+            job.resultAsset.size,
+            job.resultAsset.checksum ?? null,
+          ],
+        );
+        if (job.configuration.projectId) {
+          await client.query(
+            `UPDATE projects
+             SET payload = jsonb_set(
+               payload, '{assets}',
+               COALESCE(payload->'assets', '[]'::jsonb) || $3::jsonb, true
+             ), updated_at = now()
+             WHERE id = $1 AND owner_id = $2`,
+            [job.configuration.projectId, claim.ownerId, JSON.stringify([job.resultAsset])],
+          );
+        }
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (job.resultAsset?.storageKey) {
+        await assetStorageProvider().delete(job.resultAsset.storageKey, claim.ownerId).catch(() => undefined);
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  async fail(claim: ClaimedGeneration, message: string): Promise<"QUEUED" | "FAILED"> {
+  async fail(claim: ClaimedGeneration, message: string): Promise<"QUEUED" | "FAILED" | "CANCELLED"> {
     const pool = getPostgresPool();
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
     const retryable = /_(429|5\d\d)$/.test(message);
     const canRetry = retryable && claim.attemptCount < 4;
     const status = canRetry ? "QUEUED" : "FAILED";
     const delaySeconds = Math.min(300, 10 * (2 ** Math.max(0, claim.attemptCount - 1)));
-    await pool.query(
+    const result = await pool.query(
       `UPDATE generation_jobs
        SET status = $3, error = $4,
            retry_count = retry_count + CASE WHEN $3 = 'QUEUED' THEN 1 ELSE 0 END,
            next_retry_at = CASE WHEN $3 = 'QUEUED' THEN now() + ($5 * interval '1 second') ELSE next_retry_at END,
            locked_at = NULL, locked_by = NULL, updated_at = now()
-       WHERE id = $1 AND owner_id = $2`,
-      [claim.job.id, claim.ownerId, status, message.slice(0, 500), delaySeconds],
+       WHERE id = $1 AND owner_id = $2 AND locked_by = $6 AND status = 'SUBMITTING'`,
+      [claim.job.id, claim.ownerId, status, message.slice(0, 500), delaySeconds, claim.workerId],
     );
-    return status;
+    return result.rowCount === 1 ? status : "CANCELLED";
   }
 }

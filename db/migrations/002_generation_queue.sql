@@ -30,3 +30,11 @@ CREATE TABLE IF NOT EXISTS user_storage_connections (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS api_rate_limits (
+  owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  route text NOT NULL,
+  window_started_at timestamptz NOT NULL DEFAULT now(),
+  request_count integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (owner_id, route)
+);

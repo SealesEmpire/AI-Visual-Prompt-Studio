@@ -284,39 +284,39 @@ export function CreateWorkspace() {
         setJob(result.job);
         setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
       }
-
-      async function deliverAsset(destination: "device" | "app_library" | "my_basket") {
-        if (!job?.resultAsset) return;
-        setDeliveryStatus({ status: "PROCESSING" });
-        try {
-          const response = await fetch("/api/asset-deliveries", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ assetId: job.resultAsset.id, destination }),
-          });
-          const result = await response.json() as { id?: string; status?: string; downloadUrl?: string; error?: string };
-          if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
-          setDeliveryStatus({ id: result.id, status: result.status ?? "COMPLETE" });
-          if (result.downloadUrl) window.location.assign(result.downloadUrl);
-        } catch (error) {
-          setDeliveryStatus({ status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
-        }
-      }
-
-      async function retryDelivery() {
-        if (!deliveryStatus?.id) return;
-        setDeliveryStatus({ ...deliveryStatus, status: "PROCESSING", error: undefined });
-        try {
-          const response = await fetch(`/api/asset-deliveries/${deliveryStatus.id}/retry`, { method: "POST" });
-          const result = await response.json() as { status?: string; error?: string };
-          if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
-          setDeliveryStatus({ id: deliveryStatus.id, status: result.status ?? "COMPLETE" });
-        } catch (error) {
-          setDeliveryStatus({ ...deliveryStatus, status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
-        }
-      }
     } catch (error) {
       setJobError(error instanceof Error ? error.message : "GENERATION_RETRY_FAILED");
+    }
+  }
+
+  async function deliverAsset(destination: "device" | "app_library" | "my_basket") {
+    if (!job?.resultAsset) return;
+    setDeliveryStatus({ status: "PROCESSING" });
+    try {
+      const response = await fetch("/api/asset-deliveries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assetId: job.resultAsset.id, destination }),
+      });
+      const result = await response.json() as { id?: string; status?: string; downloadUrl?: string; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
+      setDeliveryStatus({ id: result.id, status: result.status ?? "COMPLETE" });
+      if (result.downloadUrl) window.location.assign(result.downloadUrl);
+    } catch (error) {
+      setDeliveryStatus({ status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
+    }
+  }
+
+  async function retryDelivery() {
+    if (!deliveryStatus?.id) return;
+    setDeliveryStatus({ ...deliveryStatus, status: "PROCESSING", error: undefined });
+    try {
+      const response = await fetch(`/api/asset-deliveries/${deliveryStatus.id}/retry`, { method: "POST" });
+      const result = await response.json() as { status?: string; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
+      setDeliveryStatus({ id: deliveryStatus.id, status: result.status ?? "COMPLETE" });
+    } catch (error) {
+      setDeliveryStatus({ ...deliveryStatus, status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
     }
   }
 
@@ -420,6 +420,9 @@ export function CreateWorkspace() {
             <p>Preset: {job.configuration.presetIds.join(", ") || "Automatic"} · Elapsed {formatElapsed(clock - new Date(job.createdAt).getTime())}</p>
             {typeof job.progress === "number" ? <progress max="100" value={job.progress} aria-label="Provider-reported generation progress" /> : !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) ? <div className="indeterminate-progress" aria-label="Generation in progress" /> : null}
             {job.status === "COMPLETE" && job.resultAsset && <a className="button-secondary" href={`/api/assets/${job.resultAsset.id}`}>View generated asset</a>}
+            {job.status === "COMPLETE" && job.resultAsset && (job.resultAsset.mimeType.startsWith("video/")
+              ? <video className="generated-preview" src={`/api/assets/${job.resultAsset.id}`} controls playsInline />
+              : <img className="generated-preview" src={`/api/assets/${job.resultAsset.id}`} alt="Generated result" />)}
             {job.status === "COMPLETE" && job.resultAsset && <div className="delivery-actions">
               <button type="button" className="button-quiet" onClick={() => void deliverAsset("device")}>Device</button>
               <button type="button" className="button-quiet" onClick={() => void deliverAsset("app_library")}>App Library</button>

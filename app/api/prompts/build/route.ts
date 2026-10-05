@@ -5,10 +5,18 @@ import {
   openAIConfigurationFromEnvironment,
   validateVisualAnalysis,
 } from "@/lib/providers/openai";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
-  if (!(await getAuthenticatedUser(request))) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
     return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
+  }
+  try {
+    const limit = await checkRateLimit(user.id, "prompt-build", 20, 3600);
+    if (!limit.allowed) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+  } catch {
+    return NextResponse.json({ error: "RATE_LIMIT_SERVICE_UNAVAILABLE" }, { status: 503 });
   }
   const config = openAIConfigurationFromEnvironment();
   if (!config?.promptModel) {

@@ -22,7 +22,7 @@ Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, r
 - **Authentication:** configure `NEXTAUTH_SECRET` and either a complete Google or GitHub OAuth client pair.
 - **AI analysis and prompts:** configure `OPENAI_API_KEY`, `OPENAI_ANALYSIS_MODEL`, and `OPENAI_PROMPT_MODEL`. Image analysis is supported; video analysis is not.
 - **Image generation:** configure `OPENAI_IMAGE_MODEL` and all S3 variables. The adapter checks configured models with the provider and persists returned image bytes.
-- **RunPod video:** configure the API key, endpoint ID, input-template JSON, capability JSON, and exact allowed output hostnames. Capabilities are operator-declared and must reflect the real endpoint. The endpoint is health-checked before reporting availability.
+- **RunPod video:** configure the API key, endpoint ID, input-template JSON, capability JSON, and exact allowed output hostnames. Capabilities are operator-declared and must reflect the real endpoint. The optional `RUNPOD_INSTALLED_PRESET_IDS_JSON` allowlist must be verified against the installed backend; preset use is rejected when installation is unknown. The endpoint is health-checked before reporting availability.
 - **Generation worker:** run `npm run worker` in a separate process with `GENERATION_WORKER_URL` and `GENERATION_WORKER_SECRET`. Queued work persists in PostgreSQL; stale ambiguous submissions fail closed rather than being automatically duplicated.
 - **Security:** `ENCRYPTION_KEY` is reserved for external-storage connection credentials and must be 32 bytes encoded as 64 hex characters.
 

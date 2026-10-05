@@ -12,7 +12,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:migration-status": "node scripts/migrate.mjs --status",
     "worker": "node scripts/worker.mjs",
-    "test": "node --experimental-strip-types --test tests/**/*.test.mjs"
+    "test": "node --conditions=react-server --experimental-strip-types --test tests/**/*.test.mjs"
   },
   "license": "MIT",
   "dependencies": {

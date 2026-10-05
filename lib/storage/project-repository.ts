@@ -16,7 +16,10 @@ export class PostgresProjectRepository implements ProjectRepository {
       name: row.name,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
-      assets: row.payload?.assets ?? [],
+      assets: (row.payload?.assets ?? []).map((asset: { id?: string }) => ({
+        ...asset,
+        ...(asset.id ? { url: `/api/assets/${asset.id}` } : {}),
+      })),
       prompts: row.payload?.prompts ?? [],
       generationConfigurations: row.payload?.generationConfigurations ?? [],
     }));

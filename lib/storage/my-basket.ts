@@ -193,7 +193,14 @@ function validateConnection(connection: BasketConnectionInput): void {
     host.endsWith(".r2.cloudflarestorage.com") ||
     host.endsWith(".digitaloceanspaces.com") ||
     host.endsWith(".backblazeb2.com");
-  if (url.protocol !== "https:" || !validDomain || url.username || url.password || url.search || url.hash) {
+  const providerDomain = {
+    s3_compatible: validDomain,
+    cloudflare_r2: host.endsWith(".r2.cloudflarestorage.com"),
+    digitalocean_spaces: host.endsWith(".digitaloceanspaces.com"),
+    backblaze_b2: host.endsWith(".backblazeb2.com"),
+  }[connection.provider];
+  if (url.protocol !== "https:" || !providerDomain || (url.port && url.port !== "443") ||
+      url.username || url.password || url.search || url.hash) {
     throw new Error("MY_BASKET_ENDPOINT_NOT_SUPPORTED");
   }
 }

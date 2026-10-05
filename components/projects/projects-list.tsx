@@ -52,7 +52,17 @@ export function ProjectsList() {
       {projects.length === 0 ? (
         <div className="empty-state panel"><span className="empty-state-icon">▣</span><p className="eyebrow">PROJECTS</p><h2>No projects yet.</h2><p>Create a project to keep prompts and generation settings together.</p><Link href="/create" className="button-primary">Open Create <span>↗</span></Link></div>
       ) : (
-        <div className="project-grid">{projects.map((project) => <article className="panel project-card" key={project.id}><span className="feature-number">PROJECT</span><h2>{project.name}</h2><p>Created {new Date(project.createdAt).toLocaleDateString()}</p><span>{project.prompts.length} prompts · {project.assets.length} assets</span></article>)}</div>
+        <div className="project-grid">{projects.map((project) => <article className="panel project-card" key={project.id}>
+          <span className="feature-number">PROJECT</span><h2>{project.name}</h2><p>Created {new Date(project.createdAt).toLocaleDateString()}</p>
+          <span>{project.prompts.length} prompts · {project.assets.length} assets</span>
+          {project.assets.map((asset) => <a className="project-asset-link" href={`/api/assets/${asset.id}`} key={asset.id}>
+            {asset.mimeType.startsWith("video/")
+              ? <video src={`/api/assets/${asset.id}`} controls playsInline />
+              : <img src={`/api/assets/${asset.id}`} alt={asset.name} />}
+            <span>{asset.name}</span>
+          </a>)}
+          {project.prompts.map((artifact) => <details key={artifact.id}><summary>{artifact.prompt.slice(0, 72)}</summary><p>{artifact.prompt}</p></details>)}
+        </article>)}</div>
       )}
     </>
   );

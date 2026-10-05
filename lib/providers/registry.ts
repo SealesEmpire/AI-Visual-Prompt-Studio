@@ -37,6 +37,7 @@ export interface GenerationProvider {
   id: string;
   displayName: string;
   capabilities: ProviderCapabilities;
+  installedPresetIds?: string[];
   generate(
     configuration: GenerationConfiguration,
     context?: { ownerId: string; jobId?: string },

@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "@/lib/auth/service";
 import { getPostgresPool } from "@/lib/database/postgres";
 import { assetStorageProvider } from "@/lib/storage/s3";
 import type { MediaKind } from "@/types/application";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,12 @@ const allowed = new Map([
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
+  try {
+    const limit = await checkRateLimit(user.id, "media-upload", 30, 3600);
+    if (!limit.allowed) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
+  } catch {
+    return NextResponse.json({ error: "RATE_LIMIT_SERVICE_UNAVAILABLE" }, { status: 503 });
+  }
   if (Number(request.headers.get("content-length") ?? 0) > maxFileSize + 64 * 1024) {
     return NextResponse.json({ error: "UPLOAD_TOO_LARGE" }, { status: 413 });
   }
@@ -30,10 +37,12 @@ export async function POST(request: Request) {
   let form: FormData;
   try {
     const body = await readRequestBody(request, maxFileSize + 64 * 1024);
+    const buffer = new ArrayBuffer(body.byteLength);
+    new Uint8Array(buffer).set(body);
     form = await new Request(request.url, {
       method: "POST",
       headers: { "content-type": request.headers.get("content-type") ?? "" },
-      body,
+      body: buffer,
     }).formData();
   } catch (error) {
     if (error instanceof Error && error.message === "UPLOAD_TOO_LARGE") {
