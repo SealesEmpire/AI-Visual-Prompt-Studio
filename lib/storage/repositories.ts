@@ -18,7 +18,7 @@ export interface GenerationHistoryRepository {
 export type AssetDestination = "device" | "app_library" | "my_basket";
 
 export interface AssetDeliveryService {
-  deliver(assetId: string, destination: AssetDestination): Promise<void>;
+  deliver(ownerId: string, assetId: string, destination: AssetDestination): Promise<{ downloadUrl?: string }>;
 }
 
 export interface StorageCapabilities {

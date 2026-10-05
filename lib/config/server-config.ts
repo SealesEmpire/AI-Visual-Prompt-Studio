@@ -11,13 +11,13 @@ export interface ConfigurationGroup {
 }
 
 const groups = {
-  application: ["NEXTAUTH_URL"],
+  application: ["NEXTAUTH_URL", "GENERATION_WORKER_URL"],
   database: ["DATABASE_URL"],
   authentication: ["NEXTAUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
   openai: ["OPENAI_API_KEY", "OPENAI_ANALYSIS_MODEL", "OPENAI_PROMPT_MODEL", "OPENAI_IMAGE_MODEL"],
   runpod: ["RUNPOD_API_KEY", "RUNPOD_ENDPOINT_ID", "RUNPOD_INPUT_TEMPLATE", "RUNPOD_CAPABILITIES_JSON", "RUNPOD_ASSET_HOSTS"],
   objectStorage: ["S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"],
-  security: ["NEXTAUTH_SECRET"],
+  security: ["NEXTAUTH_SECRET", "ENCRYPTION_KEY", "GENERATION_WORKER_SECRET"],
 } as const;
 
 export type ServerConfigurationGroup = keyof typeof groups;
@@ -39,6 +39,9 @@ export function getConfigurationStatus(group: ServerConfigurationGroup): Configu
   }
   if (group === "runpod" && present.length > 0 && !isValidRunPodEnvironment()) {
     error = "RunPod settings are incomplete or invalid.";
+  }
+  if (group === "security" && process.env.ENCRYPTION_KEY && !/^[0-9a-f]{64}$/i.test(process.env.ENCRYPTION_KEY)) {
+    error = "ENCRYPTION_KEY must be 32 bytes encoded as 64 hexadecimal characters.";
   }
   if (group === "authentication" && present.length > 0 && !isValidAuthEnvironment()) {
     error = "Authentication requires NEXTAUTH_SECRET and a complete Google or GitHub client pair.";

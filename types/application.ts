@@ -15,6 +15,8 @@ export interface MediaAsset {
 
 export interface PromptArtifact {
   id: string;
+  projectId?: string;
+  sourceAssetId?: string;
   prompt: string;
   goal?: string;
   createdAt: string;
@@ -30,6 +32,7 @@ export interface PromptArtifact {
 }
 
 export interface GenerationConfiguration {
+  projectId?: string;
   prompt: string;
   negativePrompt?: string;
   mediaType: MediaKind;

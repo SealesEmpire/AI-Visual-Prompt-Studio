@@ -5,11 +5,13 @@ import {
   OpenAIVisualAnalysisProvider,
 } from "@/lib/providers/openai";
 import { isSupportedMediaType } from "@/lib/media/file-types";
+import { getPostgresPool } from "@/lib/database/postgres";
 
 const maxImageBytes = 8 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  if (!(await getAuthenticatedUser(request))) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
     return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
   }
   const config = openAIConfigurationFromEnvironment();
@@ -35,7 +37,8 @@ export async function POST(request: Request) {
   if (
     !isRecord(input) ||
     typeof input.dataUrl !== "string" ||
-    typeof input.mimeType !== "string"
+    typeof input.mimeType !== "string" ||
+    (input.assetId !== undefined && typeof input.assetId !== "string")
   ) {
     return NextResponse.json({ error: "INVALID_IMAGE" }, { status: 400 });
   }
@@ -52,9 +55,27 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (typeof input.assetId === "string") {
+      const pool = getPostgresPool();
+      if (!pool) return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
+      const source = await pool.query(
+        "SELECT id, mime_type FROM media_assets WHERE id = $1 AND owner_id = $2 AND type = 'image'",
+        [input.assetId, user.id],
+      );
+      if (!source.rows[0] || source.rows[0].mime_type !== input.mimeType) {
+        return NextResponse.json({ error: "SOURCE_ASSET_NOT_FOUND" }, { status: 404 });
+      }
+    }
     const analysis = await new OpenAIVisualAnalysisProvider(config).analyzeImage({
       dataUrl: input.dataUrl,
     });
+    if (typeof input.assetId === "string") {
+      const pool = getPostgresPool()!;
+      await pool.query(
+        "INSERT INTO visual_analyses (owner_id, media_asset_id, analysis) VALUES ($1, $2, $3::jsonb)",
+        [user.id, input.assetId, JSON.stringify(analysis)],
+      );
+    }
     return NextResponse.json({ analysis });
   } catch (error) {
     return NextResponse.json(

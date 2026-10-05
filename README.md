@@ -17,18 +17,20 @@ Open [http://localhost:3000](http://localhost:3000). Use the bottom navigation o
 
 Copy `.env.example` to `.env.local` and configure only the integrations you intend to use. Persistent user data and generation require PostgreSQL and an OAuth provider; private generated assets require S3-compatible storage. Keep all credentials server-side.
 
-Apply the initial schema with `psql "$DATABASE_URL" -f db/migrations/001_phase3.sql`.
+Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, refuses to apply the initial migration over untracked existing application tables, records migration versions, and verifies ownership fields, indexes, foreign keys, and queue columns. Inspect migration state using `npm run db:migration-status`.
 
 - **Authentication:** configure `NEXTAUTH_SECRET` and either a complete Google or GitHub OAuth client pair.
 - **AI analysis and prompts:** configure `OPENAI_API_KEY`, `OPENAI_ANALYSIS_MODEL`, and `OPENAI_PROMPT_MODEL`. Image analysis is supported; video analysis is not.
 - **Image generation:** configure `OPENAI_IMAGE_MODEL` and all S3 variables. The adapter checks configured models with the provider and persists returned image bytes.
 - **RunPod video:** configure the API key, endpoint ID, input-template JSON, capability JSON, and exact allowed output hostnames. Capabilities are operator-declared and must reflect the real endpoint. The endpoint is health-checked before reporting availability.
+- **Generation worker:** run `npm run worker` in a separate process with `GENERATION_WORKER_URL` and `GENERATION_WORKER_SECRET`. Queued work persists in PostgreSQL; stale ambiguous submissions fail closed rather than being automatically duplicated.
+- **Security:** `ENCRYPTION_KEY` is reserved for external-storage connection credentials and must be 32 bytes encoded as 64 hex characters.
 
 Provider, auth, database, and storage credentials are not supplied by this repository. Do not consider an integration operational until it has been configured and exercised.
 
 ## Current application
 
-- **Create:** browser-local source previews, prompt editing, image analysis, preset selection, Simple/Pro modes, persisted job history, progress, cancellation, retry, and settings reuse when the required integrations are configured.
+- **Create:** private project source-media upload, prompt editing, image analysis, preset selection, Simple/Pro modes, persisted job history, progress, cancellation, retry, and settings reuse when required services are configured.
 - **Preset manager:** searches and filters the existing registry, separates image/video presets, displays explicit variants, and stores favorites/recents in browser storage.
 - **Library and projects:** account-backed persistence requires PostgreSQL and OAuth; browser prompt saving remains available as a fallback.
 - **Generation API:** validates requests, records owner-scoped jobs, and dispatches only to configured providers. Unsupported video analysis, unowned references, and unavailable capabilities fail explicitly; no output is simulated.

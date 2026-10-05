@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PresetCounts } from "@/components/presets/preset-browser";
 import { PageHeading } from "@/components/ui/page-heading";
 import { ProviderStatuses } from "@/components/settings/provider-statuses";
+import { MyBasketSettings } from "@/components/settings/my-basket-settings";
 
 export default function SettingsPage() {
   return (
@@ -10,7 +11,7 @@ export default function SettingsPage() {
       <section className="settings-list">
         <ProviderStatuses />
         <Link href="/settings/presets" className="panel settings-row"><span className="settings-row-icon">▦</span><div><strong>Preset manager</strong><p>Browse, search, and favorite registered presets.</p><small><PresetCounts /></small></div><span className="settings-row-arrow">→</span></Link>
-        <article className="panel settings-row"><span className="settings-row-icon">⌁</span><div><strong>My Basket</strong><p>External storage delivery is not implemented; generated assets remain in the app library.</p></div><span className="connection-state">NOT IMPLEMENTED</span></article>
+        <MyBasketSettings />
       </section>
     </div>
   );

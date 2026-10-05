@@ -19,6 +19,7 @@ export interface AssetStorageProvider {
   signedReadUrl(storageKey: string, ownerId: string): Promise<string>;
   testConnection(ownerId: string): Promise<void>;
   delete(storageKey: string, ownerId: string): Promise<void>;
+  read(storageKey: string, ownerId: string): Promise<Uint8Array>;
 }
 
 export function assetStorageProvider(): AssetStorageProvider {
@@ -86,6 +87,14 @@ export function assetStorageProvider(): AssetStorageProvider {
         throw new Error("ASSET_NOT_FOUND");
       }
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }));
+    },
+    async read(storageKey, ownerId) {
+      if (!isSafeIdentifier(ownerId) || !storageKey.startsWith(`${ownerId}/`)) {
+        throw new Error("ASSET_NOT_FOUND");
+      }
+      const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: storageKey }));
+      if (!result.Body) throw new Error("ASSET_NOT_FOUND");
+      return new Uint8Array(await result.Body.transformToByteArray());
     },
   };
 }

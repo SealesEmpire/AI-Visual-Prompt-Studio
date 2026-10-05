@@ -10,11 +10,13 @@ export function MediaInput({
   asset,
   onChange,
   onAnalyze,
+  onUpload,
   isAnalyzed = false,
 }: {
   asset: MediaAsset | null;
   onChange: (asset: MediaAsset | null) => void;
   onAnalyze?: (file: File) => void;
+  onUpload?: (file: File) => Promise<MediaAsset>;
   isAnalyzed?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +24,8 @@ export function MediaInput({
   const fileRef = useRef<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const safePreview = getLocalPreviewUrl(preview);
 
   useEffect(() => {
@@ -53,6 +57,14 @@ export function MediaInput({
       size: file.size,
       url,
     });
+    setUploadError("");
+    if (onUpload) {
+      setUploading(true);
+      void onUpload(file)
+        .then((uploaded) => onChange(uploaded))
+        .catch((error: unknown) => setUploadError(error instanceof Error ? error.message : "MEDIA_UPLOAD_FAILED"))
+        .finally(() => setUploading(false));
+    }
   }
 
   function remove() {
@@ -74,8 +86,10 @@ export function MediaInput({
         <div className="media-preview">
           {safePreview && isVideoMediaType(asset.mimeType) ? <video src={safePreview} controls playsInline /> : safePreview ? <img src={safePreview} alt={`Preview of ${asset.name}`} /> : <span className="field-note">Preview unavailable.</span>}
           <div className="media-preview-meta"><strong>{asset.name}</strong><span>{formatBytes(asset.size)} · {asset.mimeType}</span></div>
+          {uploading && <p className="field-note" role="status">Uploading private project media…</p>}
+          {uploadError && <p className="job-error" role="status">{uploadError}</p>}
           <div className="media-preview-actions"><button type="button" className="button-secondary" onClick={() => inputRef.current?.click()}>Replace</button><button type="button" className="button-quiet" onClick={remove}>Remove</button></div>
-          {onAnalyze && <button type="button" className="button-quiet analyze-media-button" disabled={!fileRef.current || isVideoMediaType(asset.mimeType)} onClick={() => { if (fileRef.current) onAnalyze(fileRef.current); }}>Analyze image</button>}
+          {onAnalyze && <button type="button" className="button-quiet analyze-media-button" disabled={!fileRef.current || uploading || isVideoMediaType(asset.mimeType)} onClick={() => { if (fileRef.current) onAnalyze(fileRef.current); }}>Analyze image</button>}
           <p className="field-note">Preview runs in this browser. Media is {isAnalyzed ? "analyzed by the configured AI provider." : "not uploaded or analyzed."}</p>
         </div>
       ) : (

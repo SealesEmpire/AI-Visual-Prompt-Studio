@@ -8,12 +8,14 @@ export class PostgresPromptRepository implements PromptRepository {
     const pool = getPostgresPool();
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
     const result = await pool.query(
-      `SELECT id, prompt, goal, analysis, editing_intent, created_at
+      `SELECT id, project_id, media_asset_id, prompt, goal, analysis, editing_intent, created_at
        FROM prompt_artifacts WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 200`,
       [ownerId],
     );
     return result.rows.map((row) => ({
       id: row.id,
+      ...(row.project_id ? { projectId: row.project_id } : {}),
+      ...(row.media_asset_id ? { sourceAssetId: row.media_asset_id } : {}),
       prompt: row.prompt,
       ...(row.goal ? { goal: row.goal } : {}),
       createdAt: new Date(row.created_at).toISOString(),
@@ -27,15 +29,18 @@ export class PostgresPromptRepository implements PromptRepository {
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
     await pool.query(
       `INSERT INTO prompt_artifacts
-        (id, owner_id, prompt, goal, analysis, editing_intent, created_at)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
+        (id, owner_id, project_id, media_asset_id, prompt, goal, analysis, editing_intent, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
        ON CONFLICT (id) DO UPDATE
        SET prompt = EXCLUDED.prompt, goal = EXCLUDED.goal,
-           analysis = EXCLUDED.analysis, editing_intent = EXCLUDED.editing_intent
+           analysis = EXCLUDED.analysis, editing_intent = EXCLUDED.editing_intent,
+           project_id = EXCLUDED.project_id, media_asset_id = EXCLUDED.media_asset_id
        WHERE prompt_artifacts.owner_id = EXCLUDED.owner_id`,
       [
         prompt.id,
         ownerId,
+        prompt.projectId ?? null,
+        prompt.sourceAssetId ?? null,
         prompt.prompt,
         prompt.goal ?? null,
         prompt.analysis ? JSON.stringify(prompt.analysis) : null,
@@ -43,5 +48,18 @@ export class PostgresPromptRepository implements PromptRepository {
         prompt.createdAt,
       ],
     );
+    if (prompt.projectId) {
+      await pool.query(
+        `UPDATE projects
+         SET payload = jsonb_set(
+           payload,
+           '{prompts}',
+           COALESCE(payload->'prompts', '[]'::jsonb) || $3::jsonb,
+           true
+         ), updated_at = now()
+         WHERE id = $1 AND owner_id = $2`,
+        [prompt.projectId, ownerId, JSON.stringify([prompt])],
+      );
+    }
   }
 }

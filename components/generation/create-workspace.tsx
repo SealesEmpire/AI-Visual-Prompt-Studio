@@ -5,7 +5,7 @@ import { MediaInput } from "@/components/media/media-input";
 import { PresetSelector } from "@/components/presets/preset-browser";
 import { PromptEditor } from "@/components/prompt/prompt-editor";
 import { browserPromptRepository } from "@/lib/storage/browser-prompts";
-import type { GenerationConfiguration, GenerationJob, MediaAsset, MediaKind, PromptArtifact, VisualAnalysis } from "@/types/application";
+import type { GenerationConfiguration, GenerationJob, MediaAsset, MediaKind, Project, PromptArtifact, VisualAnalysis } from "@/types/application";
 
 type WorkspaceMode = "simple" | "pro";
 type AspectRatio = "16:9" | "1:1" | "9:16";
@@ -34,6 +34,53 @@ export function CreateWorkspace() {
   const [historyError, setHistoryError] = useState("");
   const [reusedConfiguration, setReusedConfiguration] = useState<GenerationConfiguration | null>(null);
   const [clock, setClock] = useState(Date.now());
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [projectError, setProjectError] = useState("");
+  const [deliveryStatus, setDeliveryStatus] = useState<{ id?: string; status: string; error?: string } | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/projects", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json() as { projects?: Project[] };
+        if (!response.ok) return;
+        const existing = result.projects ?? [];
+        setProjects(existing);
+        if (existing[0]) setProjectId(existing[0].id);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function createWorkspaceProject() {
+    if (!newProjectName.trim()) return;
+    setProjectError("");
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: newProjectName.trim() }),
+      });
+      const result = await response.json() as { project?: Project; error?: string };
+      if (!response.ok || !result.project) throw new Error(result.error ?? "PROJECT_CREATION_FAILED");
+      setProjects((items) => [result.project!, ...items]);
+      setProjectId(result.project.id);
+      setNewProjectName("");
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "PROJECT_CREATION_FAILED");
+    }
+  }
+
+  async function uploadSourceMedia(file: File): Promise<MediaAsset> {
+    if (!projectId) throw new Error("CREATE_OR_SELECT_PROJECT_TO_UPLOAD_MEDIA");
+    const form = new FormData();
+    form.set("projectId", projectId);
+    form.set("file", file);
+    const response = await fetch("/api/media", { method: "POST", body: form });
+    const result = await response.json() as { asset?: MediaAsset; error?: string };
+    if (!response.ok || !result.asset) throw new Error(result.error ?? "MEDIA_UPLOAD_FAILED");
+    return result.asset;
+  }
 
   useEffect(() => {
     let active = true;
@@ -87,6 +134,8 @@ export function CreateWorkspace() {
     }
     const artifact: PromptArtifact = {
       id: crypto.randomUUID(),
+      ...(projectId ? { projectId } : {}),
+      ...(asset?.url?.startsWith("/api/assets/") ? { sourceAssetId: asset.id } : {}),
       prompt: prompt.trim(),
       goal: goal.trim() || undefined,
       createdAt: new Date().toISOString(),
@@ -124,7 +173,11 @@ export function CreateWorkspace() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mimeType: file.type, dataUrl }),
+        body: JSON.stringify({
+          mimeType: file.type,
+          dataUrl,
+          ...(asset?.url?.startsWith("/api/assets/") ? { assetId: asset.id } : {}),
+        }),
       });
       const result = await response.json() as { analysis?: VisualAnalysis; error?: string };
       if (!response.ok) throw new Error(result.error ?? "VISUAL_ANALYSIS_FAILED");
@@ -178,6 +231,7 @@ export function CreateWorkspace() {
         body: JSON.stringify({
           mediaType,
           prompt: prompt || idea,
+          ...(projectId ? { projectId } : {}),
           presetIds: reusedConfiguration?.presetIds ?? (presetId ? [presetId] : []),
           ...(reusedConfiguration?.providerId ? { providerId: reusedConfiguration.providerId } : {}),
           ...(reusedConfiguration?.modelId ? { modelId: reusedConfiguration.modelId } : {}),
@@ -189,7 +243,6 @@ export function CreateWorkspace() {
           ...(reusedConfiguration?.width !== undefined ? { width: reusedConfiguration.width } : {}),
           ...(reusedConfiguration?.height !== undefined ? { height: reusedConfiguration.height } : {}),
           ...(reusedConfiguration?.duration !== undefined ? { duration: reusedConfiguration.duration } : {}),
-          ...(asset ? { referenceAsset: { id: asset.id, name: asset.name, mimeType: asset.mimeType, size: asset.size } } : {}),
         }),
       });
       const result = await response.json() as { job?: GenerationJob; error?: string };
@@ -231,6 +284,37 @@ export function CreateWorkspace() {
         setJob(result.job);
         setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
       }
+
+      async function deliverAsset(destination: "device" | "app_library" | "my_basket") {
+        if (!job?.resultAsset) return;
+        setDeliveryStatus({ status: "PROCESSING" });
+        try {
+          const response = await fetch("/api/asset-deliveries", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ assetId: job.resultAsset.id, destination }),
+          });
+          const result = await response.json() as { id?: string; status?: string; downloadUrl?: string; error?: string };
+          if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
+          setDeliveryStatus({ id: result.id, status: result.status ?? "COMPLETE" });
+          if (result.downloadUrl) window.location.assign(result.downloadUrl);
+        } catch (error) {
+          setDeliveryStatus({ status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
+        }
+      }
+
+      async function retryDelivery() {
+        if (!deliveryStatus?.id) return;
+        setDeliveryStatus({ ...deliveryStatus, status: "PROCESSING", error: undefined });
+        try {
+          const response = await fetch(`/api/asset-deliveries/${deliveryStatus.id}/retry`, { method: "POST" });
+          const result = await response.json() as { status?: string; error?: string };
+          if (!response.ok) throw new Error(result.error ?? "ASSET_DELIVERY_FAILED");
+          setDeliveryStatus({ id: deliveryStatus.id, status: result.status ?? "COMPLETE" });
+        } catch (error) {
+          setDeliveryStatus({ ...deliveryStatus, status: "FAILED", error: error instanceof Error ? error.message : "ASSET_DELIVERY_FAILED" });
+        }
+      }
     } catch (error) {
       setJobError(error instanceof Error ? error.message : "GENERATION_RETRY_FAILED");
     }
@@ -258,7 +342,17 @@ export function CreateWorkspace() {
 
         <section className="workflow-card panel">
           <div className="section-title-row"><div><span className="step-index">01</span><h2>Start with a reference</h2></div><span className="optional-label">OPTIONAL</span></div>
-          <MediaInput asset={asset} onChange={(nextAsset) => { setAsset(nextAsset); setAnalysis(undefined); setEditingIntent(undefined); }} onAnalyze={(file) => void analyzeImage(file)} isAnalyzed={Boolean(analysis)} />
+          <label className="form-label" htmlFor="active-project">Project association</label>
+          <div className="project-association">
+            <select id="active-project" className="text-input" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">Select a project for persistent media</option>
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+            <input className="text-input" value={newProjectName} maxLength={160} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project name" aria-label="New project name" />
+            <button type="button" className="button-secondary" onClick={() => void createWorkspaceProject()}>Create</button>
+          </div>
+          {projectError && <p className="job-error" role="status">{projectError}</p>}
+          <MediaInput asset={asset} onChange={(nextAsset) => { setAsset(nextAsset); setAnalysis(undefined); setEditingIntent(undefined); }} onUpload={uploadSourceMedia} onAnalyze={(file) => void analyzeImage(file)} isAnalyzed={Boolean(analysis)} />
         </section>
 
         <section className="workflow-card panel">
@@ -326,6 +420,12 @@ export function CreateWorkspace() {
             <p>Preset: {job.configuration.presetIds.join(", ") || "Automatic"} · Elapsed {formatElapsed(clock - new Date(job.createdAt).getTime())}</p>
             {typeof job.progress === "number" ? <progress max="100" value={job.progress} aria-label="Provider-reported generation progress" /> : !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) ? <div className="indeterminate-progress" aria-label="Generation in progress" /> : null}
             {job.status === "COMPLETE" && job.resultAsset && <a className="button-secondary" href={`/api/assets/${job.resultAsset.id}`}>View generated asset</a>}
+            {job.status === "COMPLETE" && job.resultAsset && <div className="delivery-actions">
+              <button type="button" className="button-quiet" onClick={() => void deliverAsset("device")}>Device</button>
+              <button type="button" className="button-quiet" onClick={() => void deliverAsset("app_library")}>App Library</button>
+              <button type="button" className="button-quiet" onClick={() => void deliverAsset("my_basket")}>My Basket</button>
+            </div>}
+            {deliveryStatus && <p className={deliveryStatus.status === "FAILED" ? "job-error" : ""} role="status">Delivery: {deliveryStatus.status}{deliveryStatus.error ? ` · ${deliveryStatus.error}` : ""}{deliveryStatus.status === "FAILED" && deliveryStatus.id && <button type="button" className="button-quiet" onClick={() => void retryDelivery()}>Retry delivery</button>}</p>}
             {job.status === "COMPLETE" && <button type="button" className="button-quiet" onClick={() => reuseSettings(job.configuration)}>Reuse settings</button>}
             {job.status === "FAILED" && <button type="button" className="button-secondary" onClick={() => void retryJob()}>Retry</button>}
             {!["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) && <button type="button" className="button-quiet" onClick={() => void cancelJob()}>Cancel</button>}

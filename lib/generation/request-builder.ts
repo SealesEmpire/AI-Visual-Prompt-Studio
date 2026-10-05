@@ -5,6 +5,7 @@ import {
 import type { MediaAsset, MediaKind } from "../../types/application.ts";
 
 export interface NormalizedGenerationRequest {
+  projectId?: string;
   mediaType: MediaKind;
   prompt: string;
   negativePrompt?: string;
@@ -77,6 +78,7 @@ export class GenerationRequestBuilder {
     }
 
     const request: NormalizedGenerationRequest = {
+      ...(optionalUuid(input.projectId, "projectId")),
       mediaType: input.mediaType,
       prompt: input.prompt.trim(),
       presetIds,
@@ -97,6 +99,14 @@ export class GenerationRequestBuilder {
 }
 
 export const generationRequestBuilder = new GenerationRequestBuilder();
+
+function optionalUuid(value: unknown, field: string): Record<string, string> | Record<never, never> {
+  if (value === undefined) return {};
+  if (typeof value !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(`Invalid ${field}`);
+  }
+  return { [field]: value };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

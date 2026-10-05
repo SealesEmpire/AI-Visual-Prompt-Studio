@@ -69,6 +69,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
   }
   const repository = new PostgresGenerationJobRepository();
+  if (configuration.projectId) {
+    const project = await (await import("@/lib/database/postgres")).getPostgresPool()?.query(
+      "SELECT id FROM projects WHERE id = $1 AND owner_id = $2",
+      [configuration.projectId, user.id],
+    );
+    if (!project?.rows[0]) return NextResponse.json({ error: "PROJECT_NOT_FOUND" }, { status: 404 });
+  }
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
@@ -77,7 +84,7 @@ export async function POST(request: Request) {
   }
   const pending = {
     id,
-    status: "PENDING" as const,
+    status: "QUEUED" as const,
     providerId: provider.id,
     configuration: { ...configuration, providerId: provider.id },
     createdAt,
@@ -86,37 +93,12 @@ export async function POST(request: Request) {
 
   try {
     const job = await repository.create(user.id, pending, idempotencyKey);
-    if (job.id !== id || job.status !== "PENDING") {
-      return NextResponse.json({ job }, { status: 200 });
-    }
-    const submitted = await provider.generate(job.configuration, { ownerId: user.id, jobId: job.id });
-    const saved = {
-      ...job,
-      ...submitted,
-      id: job.id,
-      providerId: provider.id,
-      configuration: job.configuration,
-      createdAt: job.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
-    await repository.save(user.id, saved);
-    return NextResponse.json({ job: safeJob(saved) }, { status: 202 });
+    return NextResponse.json({ job: safeJob(job) }, { status: job.id === id ? 202 : 200 });
   } catch (error) {
     if (error instanceof Error && error.message === "DATABASE_NOT_CONFIGURED") {
       return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
     }
-    const failed = {
-      ...pending,
-      status: "FAILED" as const,
-      error: classifyGenerationError(error),
-      updatedAt: new Date().toISOString(),
-    };
-    try {
-      await repository.save(user.id, failed);
-    } catch {
-      return NextResponse.json({ error: "GENERATION_FAILED_AND_JOB_PERSISTENCE_FAILED" }, { status: 503 });
-    }
-    return NextResponse.json({ job: safeJob(failed) }, { status: 502 });
+    return NextResponse.json({ error: "GENERATION_QUEUE_UNAVAILABLE" }, { status: 503 });
   }
 }
 
@@ -127,14 +109,6 @@ function safeJob<T extends { error?: string; resultAsset?: unknown }>(job: T) {
     ...(error ? { error: sanitizeError(error) } : {}),
     ...(resultAsset ? { resultAsset } : {}),
   };
-}
-
-function classifyGenerationError(error: unknown): string {
-  if (!(error instanceof Error)) return "GENERATION_FAILED";
-  if (error.message.includes("NOT_CONFIGURED")) return error.message;
-  if (error.message.includes("CAPABILITY")) return error.message;
-  if (error.message.includes("HTTP_")) return error.message.replace(/\d{3}/g, "xxx");
-  return "GENERATION_PROVIDER_ERROR";
 }
 
 function sanitizeError(error: string): string {

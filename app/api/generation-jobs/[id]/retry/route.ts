@@ -34,19 +34,7 @@ export async function POST(
     if (retry.id !== proposedId) {
       return NextResponse.json({ job: retry }, { status: 200 });
     }
-    const submitted = await provider.generate(retry.configuration, { ownerId: user.id, jobId: retry.id });
-    const updated = {
-      ...retry,
-      ...submitted,
-      id: retry.id,
-      providerId: provider.id,
-      configuration: retry.configuration,
-      retryCount: retryCount + 1,
-      createdAt: retry.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
-    await repository.save(user.id, updated);
-    return NextResponse.json({ job: updated }, { status: 202 });
+    return NextResponse.json({ job: retry }, { status: 202 });
   } catch {
     return NextResponse.json({ error: "GENERATION_RETRY_FAILED" }, { status: 502 });
   }

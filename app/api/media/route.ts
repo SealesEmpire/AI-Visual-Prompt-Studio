@@ -29,8 +29,16 @@ export async function POST(request: Request) {
   if (!pool) return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
   let form: FormData;
   try {
-    form = await request.formData();
-  } catch {
+    const body = await readRequestBody(request, maxFileSize + 64 * 1024);
+    form = await new Request(request.url, {
+      method: "POST",
+      headers: { "content-type": request.headers.get("content-type") ?? "" },
+      body,
+    }).formData();
+  } catch (error) {
+    if (error instanceof Error && error.message === "UPLOAD_TOO_LARGE") {
+      return NextResponse.json({ error: "UPLOAD_TOO_LARGE" }, { status: 413 });
+    }
     return NextResponse.json({ error: "INVALID_UPLOAD" }, { status: 400 });
   }
   const file = form.get("file");
@@ -123,4 +131,28 @@ function ascii(bytes: Uint8Array, start: number, end: number): string {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function readRequestBody(request: Request, limit: number): Promise<Uint8Array> {
+  if (!request.body) throw new Error("EMPTY_UPLOAD");
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      throw new Error("UPLOAD_TOO_LARGE");
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }

@@ -16,8 +16,8 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
     requireUuid(userId, "userId");
     const result = await pool.query(
       `INSERT INTO generation_jobs
-        (id, owner_id, provider_id, provider_job_id, status, configuration, result_asset, progress, error, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)
+        (id, owner_id, provider_id, provider_job_id, status, configuration, result_asset, progress, error, idempotency_key, retry_count)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
        ON CONFLICT (owner_id, idempotency_key) DO NOTHING
        RETURNING *`,
       [
@@ -31,6 +31,7 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
         job.progress ?? null,
         job.error ?? null,
         idempotencyKey ?? null,
+        job.retryCount ?? 0,
       ],
     );
     if (result.rows[0]) return rowToJob(result.rows[0]);
@@ -92,14 +93,15 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
     if (job.resultAsset) {
       await pool.query(
         `INSERT INTO media_assets
-          (id, owner_id, generation_job_id, type, mime_type, storage_key, size, checksum)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (id, owner_id, project_id, generation_job_id, type, mime_type, storage_key, size, checksum)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE
          SET storage_key = EXCLUDED.storage_key, size = EXCLUDED.size, checksum = EXCLUDED.checksum
          WHERE media_assets.owner_id = EXCLUDED.owner_id`,
         [
           job.resultAsset.id,
           userId,
+          job.configuration.projectId ?? null,
           job.id,
           job.configuration.mediaType,
           job.resultAsset.mimeType,
@@ -108,6 +110,19 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
           job.resultAsset.checksum ?? null,
         ],
       );
+      if (job.configuration.projectId) {
+        await pool.query(
+          `UPDATE projects
+           SET payload = jsonb_set(
+             payload,
+             '{assets}',
+             COALESCE(payload->'assets', '[]'::jsonb) || $3::jsonb,
+             true
+           ), updated_at = now()
+           WHERE id = $1 AND owner_id = $2`,
+          [job.configuration.projectId, userId, JSON.stringify([job.resultAsset])],
+        );
+      }
     }
   }
 }
