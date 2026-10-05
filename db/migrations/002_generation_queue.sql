@@ -10,6 +10,8 @@ ALTER TABLE generation_jobs
 CREATE INDEX IF NOT EXISTS generation_jobs_queue_idx
   ON generation_jobs (next_retry_at, created_at)
   WHERE status IN ('PENDING', 'QUEUED');
+CREATE UNIQUE INDEX IF NOT EXISTS generation_configurations_job_uidx
+  ON generation_configurations (generation_job_id);
 
 ALTER TABLE asset_delivery_jobs
   ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 5);

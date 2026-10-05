@@ -34,14 +34,46 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
         job.retryCount ?? 0,
       ],
     );
-    if (result.rows[0]) return rowToJob(result.rows[0]);
-    if (!idempotencyKey) throw new Error("GENERATION_JOB_INSERT_FAILED");
-    const existing = await pool.query(
-      "SELECT * FROM generation_jobs WHERE owner_id = $1 AND idempotency_key = $2",
-      [userId, idempotencyKey],
+    let savedRow = result.rows[0];
+    if (!savedRow && idempotencyKey) {
+      const existing = await pool.query(
+        "SELECT * FROM generation_jobs WHERE owner_id = $1 AND idempotency_key = $2",
+        [userId, idempotencyKey],
+      );
+      savedRow = existing.rows[0];
+    }
+    if (!savedRow) throw new Error("GENERATION_JOB_INSERT_FAILED");
+    const savedJob = rowToJob(savedRow);
+    await pool.query(
+      `INSERT INTO generation_configurations (owner_id, project_id, generation_job_id, configuration)
+       VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (generation_job_id) DO UPDATE
+       SET configuration = EXCLUDED.configuration
+       WHERE generation_configurations.owner_id = EXCLUDED.owner_id`,
+      [userId, savedJob.configuration.projectId ?? null, savedJob.id, JSON.stringify(savedJob.configuration)],
     );
-    if (!existing.rows[0]) throw new Error("GENERATION_JOB_INSERT_FAILED");
-    return rowToJob(existing.rows[0]);
+    if (savedJob.configuration.projectId) {
+      await pool.query(
+        `UPDATE projects
+         SET payload = jsonb_set(
+           payload, '{generationConfigurations}',
+           COALESCE(payload->'generationConfigurations', '[]'::jsonb) || $3::jsonb,
+           true
+         ), updated_at = now()
+         WHERE id = $1 AND owner_id = $2
+           AND NOT EXISTS (
+             SELECT 1 FROM jsonb_array_elements(COALESCE(payload->'generationConfigurations', '[]'::jsonb)) AS item
+             WHERE item->>'jobId' = $4
+           )`,
+        [
+          savedJob.configuration.projectId,
+          userId,
+          JSON.stringify([{ jobId: savedJob.id, ...savedJob.configuration }]),
+          savedJob.id,
+        ],
+      );
+    }
+    return savedJob;
   }
 
   async get(userId: string, jobId: string): Promise<GenerationJob | null> {

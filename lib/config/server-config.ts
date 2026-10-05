@@ -43,6 +43,12 @@ export function getConfigurationStatus(group: ServerConfigurationGroup): Configu
   if (group === "security" && process.env.ENCRYPTION_KEY && !/^[0-9a-f]{64}$/i.test(process.env.ENCRYPTION_KEY)) {
     error = "ENCRYPTION_KEY must be 32 bytes encoded as 64 hexadecimal characters.";
   }
+  if (group === "security" && (
+    (process.env.NEXTAUTH_SECRET && process.env.NEXTAUTH_SECRET.length < 32) ||
+    (process.env.GENERATION_WORKER_SECRET && process.env.GENERATION_WORKER_SECRET.length < 32)
+  )) {
+    error = "NEXTAUTH_SECRET and GENERATION_WORKER_SECRET must each be at least 32 characters.";
+  }
   if (group === "authentication" && present.length > 0 && !isValidAuthEnvironment()) {
     error = "Authentication requires NEXTAUTH_SECRET and a complete Google or GitHub client pair.";
   }

@@ -5,20 +5,11 @@ import { getPostgresPool } from "@/lib/database/postgres";
 import { assetStorageProvider } from "@/lib/storage/s3";
 import type { MediaKind } from "@/types/application";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import { hasAllowedMediaNameAndType, hasValidMediaSignature } from "@/lib/media/upload-validation";
 
 export const runtime = "nodejs";
 
 const maxFileSize = 100 * 1024 * 1024;
-const allowed = new Map([
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".png", "image/png"],
-  [".webp", "image/webp"],
-  [".mp4", "video/mp4"],
-  [".mov", "video/quicktime"],
-  [".webm", "video/webm"],
-]);
-
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "AUTHENTICATION_NOT_CONFIGURED" }, { status: 503 });
@@ -55,15 +46,14 @@ export async function POST(request: Request) {
   if (!(file instanceof File) || typeof projectId !== "string" || !isUuid(projectId)) {
     return NextResponse.json({ error: "INVALID_UPLOAD" }, { status: 400 });
   }
-  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
   if (
     file.size <= 0 ||
     file.size > maxFileSize ||
-    allowed.get(extension) !== file.type
+    !hasAllowedMediaNameAndType(file.name, file.type)
   ) return NextResponse.json({ error: "UNSUPPORTED_MEDIA_FILE" }, { status: 415 });
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!hasValidSignature(bytes, file.type)) {
+  if (!hasValidMediaSignature(bytes, file.type)) {
     return NextResponse.json({ error: "MEDIA_SIGNATURE_INVALID" }, { status: 415 });
   }
 
@@ -116,26 +106,6 @@ export async function POST(request: Request) {
     if (storageKey) await assetStorageProvider().delete(storageKey, user.id).catch(() => undefined);
     return NextResponse.json({ error: "MEDIA_PERSISTENCE_FAILED" }, { status: 503 });
   }
-}
-
-function hasValidSignature(bytes: Uint8Array, mimeType: string): boolean {
-  if (mimeType === "image/png") {
-    return bytes.length >= 8 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 &&
-      bytes[3] === 71 && bytes[4] === 13 && bytes[5] === 10 && bytes[6] === 26 && bytes[7] === 10;
-  }
-  if (mimeType === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  if (mimeType === "image/webp") {
-    return bytes.length >= 12 && ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP";
-  }
-  if (mimeType === "video/webm") return bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
-  if (mimeType === "video/mp4" || mimeType === "video/quicktime") {
-    return bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp";
-  }
-  return false;
-}
-
-function ascii(bytes: Uint8Array, start: number, end: number): string {
-  return String.fromCharCode(...bytes.slice(start, end));
 }
 
 function isUuid(value: string): boolean {

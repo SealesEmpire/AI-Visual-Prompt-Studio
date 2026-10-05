@@ -108,4 +108,14 @@ async function verifyQueueSchema(client) {
     "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'generation_jobs_queue_idx'",
   );
   if (!queueIndex.rows[0]) throw new Error("Generation queue index is missing.");
+  const required = await client.query(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY($1::text[])",
+    [["user_storage_connections", "api_rate_limits"]],
+  );
+  if (required.rows.length !== 2) throw new Error("User storage or API rate-limit tables are missing.");
+  const storageColumns = await client.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'user_storage_connections' AND column_name = ANY($1::text[])",
+    [["credentials_encrypted", "credential_iv", "credential_tag", "owner_id"]],
+  );
+  if (storageColumns.rows.length !== 4) throw new Error("Encrypted user storage connection fields are missing.");
 }

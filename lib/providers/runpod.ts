@@ -27,7 +27,7 @@ export class RunPodWanProvider implements GenerationProvider {
     return this.config.capabilities;
   }
 
-  async discover(): Promise<Pick<ProviderHealth, "available" | "capabilities" | "models">> {
+  async discover(): Promise<Pick<ProviderHealth, "available" | "capabilities" | "models" | "installedPresetIds">> {
     const response = await this.fetchEndpoint("/health", { method: "GET" });
     if (!response.ok) {
       return { available: false, capabilities: this.capabilities };
