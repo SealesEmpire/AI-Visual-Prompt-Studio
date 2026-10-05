@@ -11,10 +11,12 @@ test("normalizes requests with known media-compatible presets and variant metada
     presetIds: ["JFJ Deepthroat"],
     seed: 42,
     duration: 5,
+    aspectRatio: "9:16",
   });
   assert.equal(request.prompt, "A cinematic sequence");
   assert.deepEqual(request.presetVariants, { "JFJ Deepthroat": "high" });
   assert.equal(request.duration, 5);
+  assert.equal(request.aspectRatio, "9:16");
 });
 
 test("rejects unknown and media-incompatible preset identifiers", () => {
@@ -40,6 +42,10 @@ test("rejects invented variants, unconfigured strength, and invalid dimensions",
   assert.throws(
     () => builder.build({ mediaType: "image", prompt: "scene", presetIds: [], width: -1 }),
     /Invalid width/,
+  );
+  assert.throws(
+    () => builder.build({ mediaType: "image", prompt: "scene", presetIds: [], aspectRatio: "3:2" }),
+    /Invalid aspectRatio/,
   );
 });
 

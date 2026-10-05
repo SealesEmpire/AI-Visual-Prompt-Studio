@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generationRequestBuilder } from "@/lib/generation/request-builder";
-import { providerRegistry } from "@/lib/generation/provider";
+import { providerRegistry } from "@/lib/providers/registry";
 
 export async function POST(request: Request) {
   let normalizedRequest;

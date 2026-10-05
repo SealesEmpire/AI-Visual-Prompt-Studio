@@ -5,7 +5,7 @@ export default function HomePage() {
     <div className="home-page">
       <section className="hero-panel">
         <div className="hero-copy">
-          <p className="eyebrow"><span className="gold-line" />YOUR IDEAS, IN FRAME</p>
+          <p className="eyebrow"><span className="gold-line" />YOUR IDEAS, IN FOCUS</p>
           <h1>Make room<br />for <em>imagination.</em></h1>
           <p className="hero-subtitle">One thoughtful workspace for turning visual ideas into prompts ready for your creative tools.</p>
           <Link href="/create" className="button-primary">Start creating <span>↗</span></Link>
@@ -13,7 +13,7 @@ export default function HomePage() {
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" />
-          <div className="art-core"><span>F</span></div>
+          <div className="art-core"><span>AV</span></div>
           <div className="art-tag tag-prompt"><span className="tag-dot blue-dot" /> PROMPT ARCHITECT</div>
           <div className="art-tag tag-presets"><span className="tag-dot gold-dot" /> PRESET LIBRARY</div>
           <div className="art-caption">01 — CREATIVE SYSTEMS</div>

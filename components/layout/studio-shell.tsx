@@ -17,9 +17,9 @@ export function StudioShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="studio-frame">
       <aside className="desktop-sidebar">
-        <Link href="/" className="brand-lockup" aria-label="Frame home">
-          <span className="brand-mark">F</span>
-          <span><strong>FRAME</strong><small>CREATIVE STUDIO</small></span>
+        <Link href="/" className="brand-lockup" aria-label="AI Visual Prompt Studio home">
+          <span className="brand-mark">AV</span>
+          <span><strong>AI VISUAL</strong><small>PROMPT STUDIO</small></span>
         </Link>
         <p className="nav-caption">WORKSPACE</p>
         <nav className="primary-nav" aria-label="Main navigation">
@@ -35,11 +35,11 @@ export function StudioShell({ children }: { children: React.ReactNode }) {
       <div className="main-column">
         <header className="top-bar">
           <div className="mobile-brand">
-            <span className="brand-mark">F</span>
-            <strong>FRAME</strong>
+            <span className="brand-mark">AV</span>
+            <strong>AI VISUAL</strong>
           </div>
           <div className="top-bar-note"><span className="connection-dot" /> AI studio <span className="top-bar-divider">/</span> Workspace</div>
-          <div className="avatar">S</div>
+          <Link href="/settings" className="avatar" aria-label="Open settings">⚙</Link>
         </header>
         <main className="page-content">{children}</main>
         <nav className="mobile-nav" aria-label="Mobile navigation">

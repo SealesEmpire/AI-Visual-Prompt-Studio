@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { acceptedMediaTypes, isSupportedMediaType, isVideoMediaType } from "@/lib/media/file-types";
 import type { MediaAsset } from "@/types/application";
 
-const acceptedTypes = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm";
+const acceptedTypes = acceptedMediaTypes.join(",");
 
 export function MediaInput({
   asset,
@@ -31,14 +32,13 @@ export function MediaInput({
 
   function accept(file?: File) {
     if (!file) return;
-    const isImage = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
-    const isVideo = ["video/mp4", "video/quicktime", "video/webm"].includes(file.type);
-    if (!isImage && !isVideo) {
+    if (!isSupportedMediaType(file.type)) {
       window.alert("Choose a JPG, PNG, WEBP, MP4, MOV, or WEBM file.");
       return;
     }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+    if (inputRef.current) inputRef.current.value = "";
     onChange({
       id: `${file.name}-${file.lastModified}`,
       name: file.name,
@@ -64,7 +64,7 @@ export function MediaInput({
       <input ref={inputRef} type="file" accept={acceptedTypes} className="sr-only" aria-label="Choose image or video" onChange={(event) => accept(event.target.files?.[0])} />
       {asset && preview ? (
         <div className="media-preview">
-          {asset.mimeType.startsWith("video/") ? <video src={preview} controls playsInline /> : <img src={preview} alt={`Preview of ${asset.name}`} />}
+          {isVideoMediaType(asset.mimeType) ? <video src={preview} controls playsInline /> : <img src={preview} alt={`Preview of ${asset.name}`} />}
           <div className="media-preview-meta"><strong>{asset.name}</strong><span>{formatBytes(asset.size)} · {asset.mimeType}</span></div>
           <div className="media-preview-actions"><button type="button" className="button-secondary" onClick={() => inputRef.current?.click()}>Replace</button><button type="button" className="button-quiet" onClick={remove}>Remove</button></div>
           <p className="field-note">Preview runs in this browser. No media has been uploaded or analyzed.</p>

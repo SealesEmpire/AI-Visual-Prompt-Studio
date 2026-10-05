@@ -3,17 +3,12 @@
 import { useState } from "react";
 import { MediaInput } from "@/components/media/media-input";
 import { PresetSelector } from "@/components/presets/preset-browser";
+import { PromptEditor } from "@/components/prompt/prompt-editor";
 import { browserPromptRepository } from "@/lib/storage/browser-prompts";
 import type { MediaAsset, MediaKind, PromptArtifact } from "@/types/application";
 
 type WorkspaceMode = "simple" | "pro";
 type AspectRatio = "16:9" | "1:1" | "9:16";
-
-const dimensions: Record<AspectRatio, { width: number; height: number }> = {
-  "16:9": { width: 1280, height: 720 },
-  "1:1": { width: 1024, height: 1024 },
-  "9:16": { width: 720, height: 1280 },
-};
 
 export function CreateWorkspace() {
   const [mode, setMode] = useState<WorkspaceMode>("simple");
@@ -59,7 +54,7 @@ export function CreateWorkspace() {
           mediaType,
           prompt: prompt || idea,
           presetIds: presetId ? [presetId] : [],
-          ...(mediaType === "image" ? dimensions[aspectRatio] : {}),
+          ...(mediaType === "image" ? { aspectRatio } : {}),
           ...(asset ? { referenceAsset: { id: asset.id, name: asset.name, mimeType: asset.mimeType, size: asset.size } } : {}),
         }),
       });
@@ -103,10 +98,7 @@ export function CreateWorkspace() {
 
         <section className="workflow-card panel">
           <div className="section-title-row"><div><span className="step-index">03</span><h2>Build your prompt</h2></div><span className="optional-label">EDITABLE</span></div>
-          <div className="prompt-editor-heading"><label className="form-label" htmlFor="generated-prompt">Generated AI prompt</label><span>Write or paste your own</span></div>
-          <textarea id="generated-prompt" className="text-area prompt-area" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Your production-ready prompt will appear here when an AI prompt provider is connected. You can also write your own." rows={5} />
-          <div className="prompt-actions"><button type="button" className="button-quiet" onClick={() => { if (prompt) void navigator.clipboard?.writeText(prompt); }}>Copy prompt</button><button type="button" className="button-quiet" disabled title="Connect an AI analysis provider to generate prompts">Regenerate</button><button type="button" className="button-secondary" onClick={() => void savePrompt()}>Save prompt</button></div>
-          {savedMessage && <p className="inline-feedback" role="status">{savedMessage}</p>}
+          <PromptEditor prompt={prompt} onChange={setPrompt} onSave={() => void savePrompt()} savedMessage={savedMessage} />
         </section>
       </section>
 

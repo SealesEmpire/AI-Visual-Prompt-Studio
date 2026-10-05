@@ -30,9 +30,11 @@ export interface GenerationConfiguration {
   presetVariants?: Record<string, PresetVariant>;
   presetStrengths?: Record<string, number>;
   seed?: number;
+  aspectRatio?: "16:9" | "1:1" | "9:16";
   width?: number;
   height?: number;
   duration?: number;
+  referenceAsset?: MediaAsset;
 }
 
 export interface Project {

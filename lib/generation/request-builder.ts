@@ -14,6 +14,7 @@ export interface NormalizedGenerationRequest {
   presetVariants?: Record<string, PresetVariant>;
   presetStrengths?: Record<string, number>;
   seed?: number;
+  aspectRatio?: "16:9" | "1:1" | "9:16";
   width?: number;
   height?: number;
   duration?: number;
@@ -83,6 +84,7 @@ export class GenerationRequestBuilder {
       ...(Object.keys(presetVariants).length > 0 ? { presetVariants } : {}),
       ...(presetStrengths ? { presetStrengths } : {}),
       ...(optionalInteger(input.seed, "seed")),
+      ...(optionalAspectRatio(input.aspectRatio)),
       ...(optionalInteger(input.width, "width", 1)),
       ...(optionalInteger(input.height, "height", 1)),
       ...(optionalPositiveNumber(input.duration, "duration")),
@@ -128,6 +130,16 @@ function optionalPositiveNumber(
     throw new Error(`Invalid ${field}`);
   }
   return { [field]: value };
+}
+
+function optionalAspectRatio(
+  value: unknown,
+): Record<string, "16:9" | "1:1" | "9:16"> | Record<never, never> {
+  if (value === undefined) return {};
+  if (value !== "16:9" && value !== "1:1" && value !== "9:16") {
+    throw new Error("Invalid aspectRatio");
+  }
+  return { aspectRatio: value };
 }
 
 function parseRecordOfVariants(
