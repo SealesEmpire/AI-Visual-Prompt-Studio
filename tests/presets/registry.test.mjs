@@ -45,6 +45,7 @@ test("search is case-insensitive and filters by media and known compatibility", 
   };
   assert.deepEqual(filterPresets([compatible], "image", ["model-b"]), []);
   assert.deepEqual(filterPresets([compatible], "image", ["MODEL-A"]), [compatible]);
+  assert.deepEqual(filterPresets([presetCatalog[1]], "image", ["model-a"]), []);
 });
 
 test("availability remains checking until discovery confirms installation", () => {

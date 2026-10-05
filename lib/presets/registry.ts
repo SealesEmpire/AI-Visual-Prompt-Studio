@@ -244,10 +244,9 @@ export function filterPresets(
     }
     return (
       !compatible ||
-      !preset.compatibleModels ||
-      preset.compatibleModels.some((model) =>
+      Boolean(preset.compatibleModels?.some((model) =>
         compatible.has(normalizeIdentifier(model)),
-      )
+      ))
     );
   });
 }
