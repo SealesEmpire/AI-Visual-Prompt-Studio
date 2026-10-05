@@ -5,7 +5,7 @@ import { MediaInput } from "@/components/media/media-input";
 import { PresetSelector } from "@/components/presets/preset-browser";
 import { PromptEditor } from "@/components/prompt/prompt-editor";
 import { browserPromptRepository } from "@/lib/storage/browser-prompts";
-import type { GenerationJob, MediaAsset, MediaKind, PromptArtifact, VisualAnalysis } from "@/types/application";
+import type { GenerationConfiguration, GenerationJob, MediaAsset, MediaKind, PromptArtifact, VisualAnalysis } from "@/types/application";
 
 type WorkspaceMode = "simple" | "pro";
 type AspectRatio = "16:9" | "1:1" | "9:16";
@@ -30,6 +30,30 @@ export function CreateWorkspace() {
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [jobError, setJobError] = useState("");
   const [backgroundJob, setBackgroundJob] = useState(false);
+  const [generationHistory, setGenerationHistory] = useState<GenerationJob[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [reusedConfiguration, setReusedConfiguration] = useState<GenerationConfiguration | null>(null);
+  const [clock, setClock] = useState(Date.now());
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/generation-jobs", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json() as { jobs?: GenerationJob[]; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "GENERATION_HISTORY_UNAVAILABLE");
+        if (active) setGenerationHistory(result.jobs ?? []);
+      })
+      .catch((error: unknown) => {
+        if (active) setHistoryError(error instanceof Error ? error.message : "GENERATION_HISTORY_UNAVAILABLE");
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!job || ["COMPLETE", "FAILED", "CANCELLED"].includes(job.status)) return;
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [job?.id, job?.status]);
 
   useEffect(() => {
     if (!job || ["COMPLETE", "FAILED", "CANCELLED"].includes(job.status)) return;
@@ -43,7 +67,10 @@ export function CreateWorkspace() {
           if (active) setJobError(result.error ?? "Unable to check generation status.");
           return;
         }
-        if (active && result.job) setJob(result.job);
+        if (active && result.job) {
+          setJob(result.job);
+          setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
+        }
       } catch {
         if (active) setJobError("Generation status is temporarily unavailable.");
       }
@@ -151,14 +178,26 @@ export function CreateWorkspace() {
         body: JSON.stringify({
           mediaType,
           prompt: prompt || idea,
-          presetIds: presetId ? [presetId] : [],
-          ...(mediaType === "image" ? { aspectRatio } : {}),
+          presetIds: reusedConfiguration?.presetIds ?? (presetId ? [presetId] : []),
+          ...(reusedConfiguration?.providerId ? { providerId: reusedConfiguration.providerId } : {}),
+          ...(reusedConfiguration?.modelId ? { modelId: reusedConfiguration.modelId } : {}),
+          ...(reusedConfiguration?.negativePrompt ? { negativePrompt: reusedConfiguration.negativePrompt } : {}),
+          ...(reusedConfiguration?.presetVariants ? { presetVariants: reusedConfiguration.presetVariants } : {}),
+          ...(reusedConfiguration?.presetStrengths ? { presetStrengths: reusedConfiguration.presetStrengths } : {}),
+          ...(reusedConfiguration?.seed !== undefined ? { seed: reusedConfiguration.seed } : {}),
+          ...(mediaType === "image" ? { aspectRatio: reusedConfiguration?.aspectRatio ?? aspectRatio } : {}),
+          ...(reusedConfiguration?.width !== undefined ? { width: reusedConfiguration.width } : {}),
+          ...(reusedConfiguration?.height !== undefined ? { height: reusedConfiguration.height } : {}),
+          ...(reusedConfiguration?.duration !== undefined ? { duration: reusedConfiguration.duration } : {}),
           ...(asset ? { referenceAsset: { id: asset.id, name: asset.name, mimeType: asset.mimeType, size: asset.size } } : {}),
         }),
       });
       const result = await response.json() as { job?: GenerationJob; error?: string };
       if (!response.ok) setGenerationError(result.error ?? "Generation request failed.");
-      else if (result.job) setJob(result.job);
+      else if (result.job) {
+        setJob(result.job);
+        setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
+      }
     } catch {
       setGenerationError("Generation service is unavailable.");
     } finally {
@@ -172,7 +211,10 @@ export function CreateWorkspace() {
       const response = await fetch(`/api/generation-jobs/${job.id}/cancel`, { method: "POST" });
       const result = await response.json() as { job?: GenerationJob; error?: string };
       if (!response.ok) throw new Error(result.error ?? "GENERATION_CANCELLATION_FAILED");
-      if (result.job) setJob(result.job);
+      if (result.job) {
+        setJob(result.job);
+        setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
+      }
     } catch (error) {
       setJobError(error instanceof Error ? error.message : "GENERATION_CANCELLATION_FAILED");
     }
@@ -185,13 +227,17 @@ export function CreateWorkspace() {
       const response = await fetch(`/api/generation-jobs/${job.id}/retry`, { method: "POST" });
       const result = await response.json() as { job?: GenerationJob; error?: string };
       if (!response.ok) throw new Error(result.error ?? "GENERATION_RETRY_FAILED");
-      if (result.job) setJob(result.job);
+      if (result.job) {
+        setJob(result.job);
+        setGenerationHistory((items) => [result.job!, ...items.filter((item) => item.id !== result.job!.id)]);
+      }
     } catch (error) {
       setJobError(error instanceof Error ? error.message : "GENERATION_RETRY_FAILED");
     }
   }
 
-  function reuseSettings(configuration: GenerationJob["configuration"]) {
+  function reuseSettings(configuration: GenerationConfiguration) {
+    setReusedConfiguration(configuration);
     setMediaType(configuration.mediaType);
     setPrompt(configuration.prompt);
     setPresetId(configuration.presetIds[0] ?? null);
@@ -222,7 +268,7 @@ export function CreateWorkspace() {
           <label className="form-label goal-label" htmlFor="visual-goal">What are you trying to accomplish?</label>
           <input id="visual-goal" className="text-input" value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="e.g. Create a cover image for my travel journal" />
           <button type="button" className={`analysis-toggle${analysisOpen ? " open" : ""}`} onClick={() => setAnalysisOpen(!analysisOpen)} aria-expanded={analysisOpen}>
-            <span><span className="analysis-icon">◉</span><strong>Visual analysis</strong><small>{asset ? "Media analysis is not connected" : "Add a reference to explore this area"}</small></span><span>{analysisOpen ? "−" : "+"}</span>
+            <span><span className="analysis-icon">◉</span><strong>Visual analysis</strong><small>{asset?.mimeType.startsWith("video/") ? "Video analysis unavailable" : asset ? "Analyze this image with the configured service" : "Add an image reference to analyze"}</small></span><span>{analysisOpen ? "−" : "+"}</span>
           </button>
           {analysisOpen && <div className={`analysis-placeholder${analysis ? " analysis-result" : ""}`} aria-live="polite">{isAnalyzing ? <><span className="status-pip" />Analyzing image with the configured AI service…</> : analysis ? <><strong>{analysis.summary}</strong><span>{analysis.subjects.join(" · ")}</span><small>{analysis.observations.join(" · ")}</small></> : <><span className="status-pip" />{asset?.mimeType.startsWith("video/") ? "Video analysis is not configured; upload processing is not available." : "Analysis requires an authenticated account and configured AI model."}</>}</div>}
         </section>
@@ -238,10 +284,10 @@ export function CreateWorkspace() {
           <div className="aside-heading"><div><p className="eyebrow">OUTPUT</p><h2>Configure creation</h2></div><span className="settings-spark">✳</span></div>
           <div className="field-label">OUTPUT TYPE</div>
           <div className="media-choice" role="group" aria-label="Output type">
-            <button type="button" className={mediaType === "image" ? "chosen" : ""} onClick={() => setMediaType("image")}><span>▧</span>Image</button>
-            <button type="button" className={mediaType === "video" ? "chosen" : ""} onClick={() => setMediaType("video")}><span>▷</span>Video</button>
+            <button type="button" className={mediaType === "image" ? "chosen" : ""} onClick={() => { setMediaType("image"); setReusedConfiguration(null); }}><span>▧</span>Image</button>
+            <button type="button" className={mediaType === "video" ? "chosen" : ""} onClick={() => { setMediaType("video"); setReusedConfiguration(null); }}><span>▷</span>Video</button>
           </div>
-          <PresetSelector mediaType={mediaType} value={presetId} onChange={setPresetId} />
+          <PresetSelector mediaType={mediaType} value={presetId} onChange={(value) => { setPresetId(value); setReusedConfiguration(null); }} />
           {mode === "simple" ? (
             <div className="basic-setting">
               {mediaType === "image" ? (
@@ -271,11 +317,13 @@ export function CreateWorkspace() {
             <span>{isSubmitting ? "Checking provider…" : "Generate"}</span><span>↗</span>
           </button>
           <p className="generate-note">No output is created until a real provider is connected.</p>
+          {reusedConfiguration && <p className="provider-hint">Reusing {reusedConfiguration.providerId ?? "provider"} / {reusedConfiguration.modelId ?? "default model"}; availability will be checked before submission.</p>}
           {generationError && <div className="generation-error" role="status">{generationError}</div>}
-          {job && <div className="job-card" aria-live="polite">
-            <div className="job-heading"><span className="status-pip" /><strong>{job.status === "GENERATING" ? "Generating…" : job.status}</strong><button type="button" className="button-quiet" onClick={() => setBackgroundJob(!backgroundJob)}>{backgroundJob ? "Show" : "Background"}</button></div>
+          {job && backgroundJob && !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) && <button type="button" className="button-quiet" onClick={() => setBackgroundJob(false)}>Show background generation</button>}
+          {job && !backgroundJob && <div className="job-card" aria-live="polite">
+            <div className="job-heading"><span className="status-pip" /><strong>{job.status === "GENERATING" ? "Generating…" : job.status}</strong>{!["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) && <button type="button" className="button-quiet" onClick={() => setBackgroundJob(true)}>Background</button>}</div>
             <p>Provider: {job.providerId ?? "—"} · Model: {job.configuration.modelId ?? "—"}</p>
-            <p>Preset: {job.configuration.presetIds.join(", ") || "Automatic"} · Started {new Date(job.createdAt).toLocaleTimeString()}</p>
+            <p>Preset: {job.configuration.presetIds.join(", ") || "Automatic"} · Elapsed {formatElapsed(clock - new Date(job.createdAt).getTime())}</p>
             {typeof job.progress === "number" ? <progress max="100" value={job.progress} aria-label="Provider-reported generation progress" /> : !["COMPLETE", "FAILED", "CANCELLED"].includes(job.status) ? <div className="indeterminate-progress" aria-label="Generation in progress" /> : null}
             {job.status === "COMPLETE" && job.resultAsset && <a className="button-secondary" href={`/api/assets/${job.resultAsset.id}`}>View generated asset</a>}
             {job.status === "COMPLETE" && <button type="button" className="button-quiet" onClick={() => reuseSettings(job.configuration)}>Reuse settings</button>}
@@ -284,6 +332,17 @@ export function CreateWorkspace() {
             {job.error && <p className="job-error">{job.error}</p>}
             {jobError && <p className="job-error">{jobError}</p>}
           </div>}
+          <div className="job-card" aria-live="polite">
+            <div className="job-heading"><strong>Generation history</strong></div>
+            {historyError && <p className="job-error">{historyError}</p>}
+            {!historyError && generationHistory.length === 0 && <p>No persisted generations found.</p>}
+            {generationHistory.slice(0, 5).map((item) => <div className="history-item" key={item.id}>
+              <span>{item.configuration.mediaType} · {item.status} · {item.configuration.prompt.slice(0, 80)}</span>
+              <button type="button" className="button-quiet" onClick={() => { setJob(item); setBackgroundJob(false); }}>Open</button>
+              <button type="button" className="button-quiet" onClick={() => reuseSettings(item.configuration)}>Reuse settings</button>
+              {item.resultAsset && <a className="button-quiet" href={`/api/assets/${item.resultAsset.id}`}>View asset</a>}
+            </div>)}
+          </div>
         </section>
         <section className="panel readiness-card"><span className="readiness-icon">◌</span><div><strong>Ready when you are</strong><p>Connect a provider to generate images and video.</p><a href="/settings">View settings <span>→</span></a></div></section>
       </aside>
