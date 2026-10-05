@@ -18,6 +18,8 @@ test("registers the supplied identifiers and explicit video variants", () => {
   assert.ok(ids.has("mql_casting_sex_doggy_kneel_diagona lly_behind_vagina_wan22_i2v_v1"));
   assert.ok(ids.has("mql_casting_sex_reverse_cowgirl_lie_fr ont_vagina_wan22_i2v_v1"));
   assert.ok(ids.has("wan2.2_i2v_low_ulitmate_pussy_asshol e"));
+  assert.equal(presetCatalog.filter(({ mediaType }) => mediaType === "image").length, 67);
+  assert.equal(presetCatalog.filter(({ mediaType }) => mediaType === "video").length, 59);
   assert.equal(presetCatalog.find(({ id }) => id === "JFJ Deepthroat").variant, "high");
   assert.equal(presetCatalog.find(({ id }) => id === "sid3l3g_transition_v2.0_L").variant, "low");
   assert.ok(presetCatalog.filter(({ mediaType }) => mediaType === "image").length > 0);
@@ -82,5 +84,9 @@ test("tracks favorites and recents and exports only approved registry fields", (
   assert.throws(
     () => importRegistry('{"registryVersion":1,"presets":[{"id":"x","displayName":"x","mediaType":"image","source":"existing","enabled":true,"apiKey":"secret"}]}'),
     /unsupported fields/,
+  );
+  assert.throws(
+    () => importRegistry('{"registryVersion":1,"presets":[{"id":"x","displayName":"x","mediaType":"image","source":"existing","enabled":true,"minStrength":2,"maxStrength":1}]}'),
+    /strength bounds/,
   );
 });

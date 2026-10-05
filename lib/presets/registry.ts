@@ -207,7 +207,7 @@ export function searchPresets(
   presets: readonly GenerationPreset[],
   query: string,
 ): GenerationPreset[] {
-  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return [...presets];
 
   return presets.filter((preset) => {
@@ -409,6 +409,18 @@ function parsePreset(value: unknown): GenerationPreset {
     ) {
       throw new Error("Invalid preset metadata");
     }
+  }
+  if (
+    (value.minStrength !== undefined &&
+      value.maxStrength !== undefined &&
+      (value.minStrength as number) > (value.maxStrength as number)) ||
+    (value.defaultStrength !== undefined &&
+      ((value.minStrength !== undefined &&
+        (value.defaultStrength as number) < (value.minStrength as number)) ||
+        (value.maxStrength !== undefined &&
+          (value.defaultStrength as number) > (value.maxStrength as number))))
+  ) {
+    throw new Error("Invalid preset strength bounds");
   }
   return {
     id: value.id,
