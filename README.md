@@ -17,7 +17,7 @@ Open [http://localhost:3000](http://localhost:3000). Use the bottom navigation o
 
 Copy `.env.example` to `.env.local` and configure only the integrations you intend to use. Persistent user data and generation require PostgreSQL and an OAuth provider; private generated assets require S3-compatible storage. Keep all credentials server-side.
 
-Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, refuses to apply the initial migration over untracked existing application tables, records migration versions, and verifies ownership fields, indexes, foreign keys, queue columns, generation idempotency fingerprints, and the job-event trigger. Inspect migration state using `npm run db:migration-status`.
+Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, refuses to apply the initial migration over untracked existing application tables, records migration versions, and verifies ownership fields, indexes, foreign keys, queue columns, generation idempotency fingerprints, job-event triggers, and prompt revision history. Inspect migration state using `npm run db:migration-status`.
 
 - **Authentication:** configure `NEXTAUTH_SECRET` and either a complete Google or GitHub OAuth client pair.
 - **AI analysis and prompts:** configure `OPENAI_API_KEY`, `OPENAI_ANALYSIS_MODEL`, and `OPENAI_PROMPT_MODEL`. Image analysis is supported; video analysis is not.
@@ -38,6 +38,7 @@ Provider, auth, database, and storage credentials are not supplied by this repos
 - **Provider capabilities:** `/api/providers` includes per-model capability records for identifiable generation models. Capability declarations and model-list discovery are labeled `DECLARED`; only a real operation-level verification may use `VERIFIED`. Unreported fields remain unknown instead of being inferred.
 - **Generation idempotency:** an `Idempotency-Key` is scoped to its owner and bound to the normalized request. Reusing the key with a different request returns `409`; the additive migration also fingerprints future replays of older jobs.
 - **Job event history:** after migration 004, PostgreSQL records each job's initial state and subsequent status transitions; migration 005 adds allowlisted failure codes. Authenticated owners can read paginated history at `/api/generation-jobs/{id}/events`; raw provider errors and configuration data are never included in events.
+- **Prompt revisions:** migration 006 backfills each existing prompt artifact as revision 1. Changed saves append hash-addressed snapshots in the same database transaction; authenticated owners can read revision history at `/api/prompts/{id}/revisions`. Existing prompt IDs and save/list APIs are unchanged.
 - **Assets:** generated assets are stored in private S3-compatible storage and delivered via short-lived signed URLs after ownership checks. My Basket is not connected.
 - **Preset availability:** remains unknown unless the provider reports installation. The static catalog metadata is not treated as proof of availability.
 

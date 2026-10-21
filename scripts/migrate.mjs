@@ -15,6 +15,7 @@ const migrations = [
   "003_idempotency_fingerprints",
   "004_generation_job_events",
   "005_generation_job_event_failure_codes",
+  "006_prompt_revisions",
 ];
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
@@ -56,6 +57,7 @@ try {
           if (version === "003_idempotency_fingerprints") await verifyIdempotencySchema(client);
           if (version === "004_generation_job_events") await verifyGenerationJobEventsSchema(client);
           if (version === "005_generation_job_event_failure_codes") await verifyGenerationJobEventFailureCodesSchema(client);
+          if (version === "006_prompt_revisions") await verifyPromptRevisionsSchema(client);
           await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         } else if (version === "001_phase3") {
           await verifySchema(client);
@@ -65,8 +67,10 @@ try {
           await verifyIdempotencySchema(client);
         } else if (version === "004_generation_job_events") {
           await verifyGenerationJobEventsSchema(client);
-        } else {
+        } else if (version === "005_generation_job_event_failure_codes") {
           await verifyGenerationJobEventFailureCodesSchema(client);
+        } else {
+          await verifyPromptRevisionsSchema(client);
         }
       }
       await client.query("COMMIT");
@@ -163,4 +167,20 @@ async function verifyGenerationJobEventFailureCodesSchema(client) {
     "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'generation_job_events' AND column_name = 'error_code'",
   );
   if (!column.rows[0]) throw new Error("Generation job event failure code column is missing.");
+}
+
+async function verifyPromptRevisionsSchema(client) {
+  const table = await client.query(
+    "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'prompt_revisions'",
+  );
+  if (!table.rows[0]) throw new Error("Prompt revisions table is missing.");
+  const ownership = await client.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'prompt_revisions' AND column_name = ANY($1::text[])",
+    [["owner_id", "editor_id", "prompt_artifact_id", "revision", "parent_revision_id", "content", "content_hash"]],
+  );
+  if (ownership.rows.length !== 7) throw new Error("Prompt revision ownership or snapshot fields are missing.");
+  const index = await client.query(
+    "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'prompt_revisions_owner_artifact_idx'",
+  );
+  if (!index.rows[0]) throw new Error("Prompt revisions index is missing.");
 }
