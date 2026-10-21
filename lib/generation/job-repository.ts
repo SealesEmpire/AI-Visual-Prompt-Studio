@@ -1,23 +1,34 @@
 import "server-only";
 import type { GenerationJob } from "@/types/application";
 import { getPostgresPool } from "@/lib/database/postgres";
+import { createGenerationRequestFingerprint } from "@/lib/generation/idempotency";
 
 export interface GenerationJobRepository {
-  create(userId: string, job: GenerationJob, idempotencyKey?: string): Promise<GenerationJob>;
+  create(
+    userId: string,
+    job: GenerationJob,
+    idempotencyKey?: string,
+    requestFingerprint?: string,
+  ): Promise<GenerationJob>;
   get(userId: string, jobId: string): Promise<GenerationJob | null>;
   list(userId: string): Promise<GenerationJob[]>;
   save(userId: string, job: GenerationJob): Promise<void>;
 }
 
 export class PostgresGenerationJobRepository implements GenerationJobRepository {
-  async create(userId: string, job: GenerationJob, idempotencyKey?: string): Promise<GenerationJob> {
+  async create(
+    userId: string,
+    job: GenerationJob,
+    idempotencyKey?: string,
+    requestFingerprint?: string,
+  ): Promise<GenerationJob> {
     const pool = getPostgresPool();
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
     requireUuid(userId, "userId");
     const result = await pool.query(
       `INSERT INTO generation_jobs
-        (id, owner_id, provider_id, provider_job_id, status, configuration, result_asset, progress, error, idempotency_key, retry_count)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
+        (id, owner_id, provider_id, provider_job_id, status, configuration, result_asset, progress, error, idempotency_key, retry_count, request_fingerprint)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12)
        ON CONFLICT (owner_id, idempotency_key) DO NOTHING
        RETURNING *`,
       [
@@ -32,6 +43,7 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
         job.error ?? null,
         idempotencyKey ?? null,
         job.retryCount ?? 0,
+        requestFingerprint ?? null,
       ],
     );
     let savedRow = result.rows[0];
@@ -41,6 +53,20 @@ export class PostgresGenerationJobRepository implements GenerationJobRepository 
         [userId, idempotencyKey],
       );
       savedRow = existing.rows[0];
+      if (savedRow && requestFingerprint) {
+        const existingFingerprint = typeof savedRow.request_fingerprint === "string"
+          ? savedRow.request_fingerprint
+          : createGenerationRequestFingerprint(savedRow.configuration);
+        if (existingFingerprint !== requestFingerprint) {
+          throw new Error("IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST");
+        }
+        if (savedRow.request_fingerprint == null) {
+          await pool.query(
+            "UPDATE generation_jobs SET request_fingerprint = $3 WHERE owner_id = $1 AND id = $2 AND request_fingerprint IS NULL",
+            [userId, savedRow.id, requestFingerprint],
+          );
+        }
+      }
     }
     if (!savedRow) throw new Error("GENERATION_JOB_INSERT_FAILED");
     const savedJob = rowToJob(savedRow);

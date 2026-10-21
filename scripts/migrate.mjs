@@ -9,7 +9,7 @@ if (!databaseUrl) {
 }
 
 const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 5000, statement_timeout: 30000 });
-const migrations = ["001_phase3", "002_generation_queue"];
+const migrations = ["001_phase3", "002_generation_queue", "003_idempotency_fingerprints"];
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
   "generation_jobs", "generation_configurations", "preset_favorites",
@@ -47,11 +47,14 @@ try {
           await client.query(migrationSql);
           if (version === "001_phase3") await verifySchema(client);
           if (version === "002_generation_queue") await verifyQueueSchema(client);
+          if (version === "003_idempotency_fingerprints") await verifyIdempotencySchema(client);
           await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         } else if (version === "001_phase3") {
           await verifySchema(client);
-        } else {
+        } else if (version === "002_generation_queue") {
           await verifyQueueSchema(client);
+        } else {
+          await verifyIdempotencySchema(client);
         }
       }
       await client.query("COMMIT");
@@ -118,4 +121,11 @@ async function verifyQueueSchema(client) {
     [["credentials_encrypted", "credential_iv", "credential_tag", "owner_id"]],
   );
   if (storageColumns.rows.length !== 4) throw new Error("Encrypted user storage connection fields are missing.");
+}
+
+async function verifyIdempotencySchema(client) {
+  const column = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'generation_jobs' AND column_name = 'request_fingerprint'",
+  );
+  if (!column.rows[0]) throw new Error("Generation request fingerprint column is missing.");
 }

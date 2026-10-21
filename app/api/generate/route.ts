@@ -4,6 +4,7 @@ import { generationRequestBuilder } from "@/lib/generation/request-builder";
 import { PostgresGenerationJobRepository } from "@/lib/generation/job-repository";
 import { configuredProviderRegistry } from "@/lib/providers/configured";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import { createGenerationRequestFingerprint } from "@/lib/generation/idempotency";
 
 export async function POST(request: Request) {
   let configuration;
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
     createdAt,
     updatedAt: createdAt,
   };
+  const requestFingerprint = createGenerationRequestFingerprint(pending.configuration);
 
   try {
     const limit = await checkRateLimit(user.id, "generation", 20, 3600);
@@ -105,9 +107,12 @@ export async function POST(request: Request) {
         headers: { "Retry-After": String(limit.retryAfterSeconds) },
       });
     }
-    const job = await repository.create(user.id, pending, idempotencyKey);
+    const job = await repository.create(user.id, pending, idempotencyKey, requestFingerprint);
     return NextResponse.json({ job: safeJob(job) }, { status: job.id === id ? 202 : 200 });
   } catch (error) {
+    if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     if (error instanceof Error && error.message === "DATABASE_NOT_CONFIGURED") {
       return NextResponse.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503 });
     }

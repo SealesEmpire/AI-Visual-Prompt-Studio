@@ -17,7 +17,7 @@ Open [http://localhost:3000](http://localhost:3000). Use the bottom navigation o
 
 Copy `.env.example` to `.env.local` and configure only the integrations you intend to use. Persistent user data and generation require PostgreSQL and an OAuth provider; private generated assets require S3-compatible storage. Keep all credentials server-side.
 
-Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, refuses to apply the initial migration over untracked existing application tables, records migration versions, and verifies ownership fields, indexes, foreign keys, and queue columns. Inspect migration state using `npm run db:migration-status`.
+Apply the schema with `npm run db:migrate`; it checks PostgreSQL connectivity, refuses to apply the initial migration over untracked existing application tables, records migration versions, and verifies ownership fields, indexes, foreign keys, queue columns, and generation idempotency fingerprints. Inspect migration state using `npm run db:migration-status`.
 
 - **Authentication:** configure `NEXTAUTH_SECRET` and either a complete Google or GitHub OAuth client pair.
 - **AI analysis and prompts:** configure `OPENAI_API_KEY`, `OPENAI_ANALYSIS_MODEL`, and `OPENAI_PROMPT_MODEL`. Image analysis is supported; video analysis is not.
@@ -35,6 +35,7 @@ Provider, auth, database, and storage credentials are not supplied by this repos
 - **Preset manager:** searches and filters the existing registry, separates image/video presets, displays explicit variants, and stores favorites/recents in browser storage.
 - **Library and projects:** account-backed persistence requires PostgreSQL and OAuth; browser prompt saving remains available as a fallback.
 - **Generation API:** validates requests, records owner-scoped jobs, and dispatches only to configured providers. Unsupported video analysis, unowned references, and unavailable capabilities fail explicitly; no output is simulated.
+- **Generation idempotency:** an `Idempotency-Key` is scoped to its owner and bound to the normalized request. Reusing the key with a different request returns `409`; the additive migration also fingerprints future replays of older jobs.
 - **Assets:** generated assets are stored in private S3-compatible storage and delivered via short-lived signed URLs after ownership checks. My Basket is not connected.
 - **Preset availability:** remains unknown unless the provider reports installation. The static catalog metadata is not treated as proof of availability.
 
