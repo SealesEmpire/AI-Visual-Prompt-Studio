@@ -152,6 +152,15 @@ button { color: inherit; }
 .analysis-placeholder .status-pip { width: 5px; height: 5px; }
 .prompt-editor-heading { display: flex; align-items: baseline; justify-content: space-between; }.prompt-editor-heading > span { color: #778497; font-size: 9px; }
 .prompt-area { min-height: 120px; }.prompt-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+.prompt-quality { margin-top: 14px; border: 1px solid #293747; border-radius: 7px; background: #101721; padding: 12px; }
+.prompt-quality-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #dce5ef; font-size: 11px; }.prompt-quality-heading span, .prompt-quality-note { color: #8290a1; font-size: 8px; }
+.prompt-quality-note { margin: 6px 0 10px; }.prompt-quality-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 6px; }
+.prompt-quality-score { display: grid; gap: 4px; border-radius: 5px; background: #0d131c; padding: 8px; color: #aab7c7; font-size: 8px; }
+.prompt-quality-score strong { color: #dfeafa; font-size: 16px; }.prompt-quality-score strong small { color: #8290a1; font-size: 8px; }.prompt-quality-score > small { line-height: 1.45; }
+.prompt-quality h3 { margin: 13px 0 6px; color: #c9d4e1; font-size: 9px; }.prompt-improvements { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.prompt-improvements li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #26303d; padding-top: 7px; }
+.prompt-improvements li > div:first-child { display: grid; gap: 3px; }.prompt-improvements strong { color: #d5dfeb; font-size: 9px; }.prompt-improvements span, .prompt-improvements small { color: #8794a5; font-size: 8px; line-height: 1.45; }
+.prompt-improvement-actions { display: flex; flex: 0 0 auto; gap: 3px; }
 .inline-feedback { margin: 7px 0 0; color: #91b8a4; font-size: 9px; text-align: right; }
 .create-aside { position: sticky; top: 80px; }.settings-card { padding: 17px; }
 .aside-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }

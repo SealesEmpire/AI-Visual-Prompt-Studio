@@ -222,17 +222,17 @@ export function CreateWorkspace() {
     } finally {
       setIsBuildingPrompt(false);
     }
+  }
 
-    function applyPromptImprovement(improvement: PromptImprovement) {
-      setPrompt((current) => current.trim()
-        ? `${current.trimEnd()}${/[.!?]$/.test(current.trimEnd()) ? "" : "."} ${improvement.promptAddition}`
-        : improvement.promptAddition);
-      setImprovementStatus((current) => ({ ...current, [improvement.id]: "applied" }));
-    }
+  function applyPromptImprovement(improvement: PromptImprovement) {
+    setPrompt((current) => current.trim()
+      ? `${current.trimEnd()}${/[.!?]$/.test(current.trimEnd()) ? "" : "."} ${improvement.promptAddition}`
+      : improvement.promptAddition);
+    setImprovementStatus((current) => ({ ...current, [improvement.id]: "applied" }));
+  }
 
-    function dismissPromptImprovement(improvementId: string) {
-      setImprovementStatus((current) => ({ ...current, [improvementId]: "dismissed" }));
-    }
+  function dismissPromptImprovement(improvementId: string) {
+    setImprovementStatus((current) => ({ ...current, [improvementId]: "dismissed" }));
   }
 
   async function generate() {
@@ -389,6 +389,7 @@ export function CreateWorkspace() {
           <PromptEditor prompt={prompt} onChange={setPrompt} onSave={() => void savePrompt()} onBuild={() => void buildPrompt()} isBuilding={isBuildingPrompt} savedMessage={savedMessage} />
             {promptQuality && <section className="prompt-quality" aria-label="Prompt quality evaluation">
               <div className="prompt-quality-heading"><strong>Prompt quality</strong><span>Heuristic · rubric {promptQuality.rubricVersion}</span></div>
+              <p className="prompt-quality-note">Scores describe the prompt as built; they are not recalculated after edits.</p>
               <div className="prompt-quality-scores">
                 {(Object.entries(promptQuality.scores) as Array<[keyof PromptQualityEvaluation["scores"], PromptQualityEvaluation["scores"][keyof PromptQualityEvaluation["scores"]]]>).map(([category, score]) =>
                   <div className="prompt-quality-score" key={category}>
