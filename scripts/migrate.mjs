@@ -9,7 +9,12 @@ if (!databaseUrl) {
 }
 
 const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 5000, statement_timeout: 30000 });
-const migrations = ["001_phase3", "002_generation_queue", "003_idempotency_fingerprints"];
+const migrations = [
+  "001_phase3",
+  "002_generation_queue",
+  "003_idempotency_fingerprints",
+  "004_generation_job_events",
+];
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
   "generation_jobs", "generation_configurations", "preset_favorites",
@@ -48,13 +53,16 @@ try {
           if (version === "001_phase3") await verifySchema(client);
           if (version === "002_generation_queue") await verifyQueueSchema(client);
           if (version === "003_idempotency_fingerprints") await verifyIdempotencySchema(client);
+          if (version === "004_generation_job_events") await verifyGenerationJobEventsSchema(client);
           await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         } else if (version === "001_phase3") {
           await verifySchema(client);
         } else if (version === "002_generation_queue") {
           await verifyQueueSchema(client);
-        } else {
+        } else if (version === "003_idempotency_fingerprints") {
           await verifyIdempotencySchema(client);
+        } else {
+          await verifyGenerationJobEventsSchema(client);
         }
       }
       await client.query("COMMIT");
@@ -128,4 +136,19 @@ async function verifyIdempotencySchema(client) {
     "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'generation_jobs' AND column_name = 'request_fingerprint'",
   );
   if (!column.rows[0]) throw new Error("Generation request fingerprint column is missing.");
+}
+
+async function verifyGenerationJobEventsSchema(client) {
+  const table = await client.query(
+    "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'generation_job_events'",
+  );
+  if (!table.rows[0]) throw new Error("Generation job events table is missing.");
+  const trigger = await client.query(
+    "SELECT 1 FROM pg_trigger WHERE tgname = 'generation_job_status_event_trigger' AND tgrelid = 'generation_jobs'::regclass AND NOT tgisinternal",
+  );
+  if (!trigger.rows[0]) throw new Error("Generation job status event trigger is missing.");
+  const index = await client.query(
+    "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'generation_job_events_owner_job_idx'",
+  );
+  if (!index.rows[0]) throw new Error("Generation job events index is missing.");
 }
