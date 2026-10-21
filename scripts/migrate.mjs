@@ -14,6 +14,7 @@ const migrations = [
   "002_generation_queue",
   "003_idempotency_fingerprints",
   "004_generation_job_events",
+  "005_generation_job_event_failure_codes",
 ];
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
@@ -54,6 +55,7 @@ try {
           if (version === "002_generation_queue") await verifyQueueSchema(client);
           if (version === "003_idempotency_fingerprints") await verifyIdempotencySchema(client);
           if (version === "004_generation_job_events") await verifyGenerationJobEventsSchema(client);
+          if (version === "005_generation_job_event_failure_codes") await verifyGenerationJobEventFailureCodesSchema(client);
           await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         } else if (version === "001_phase3") {
           await verifySchema(client);
@@ -61,8 +63,10 @@ try {
           await verifyQueueSchema(client);
         } else if (version === "003_idempotency_fingerprints") {
           await verifyIdempotencySchema(client);
-        } else {
+        } else if (version === "004_generation_job_events") {
           await verifyGenerationJobEventsSchema(client);
+        } else {
+          await verifyGenerationJobEventFailureCodesSchema(client);
         }
       }
       await client.query("COMMIT");
@@ -151,4 +155,12 @@ async function verifyGenerationJobEventsSchema(client) {
     "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'generation_job_events_owner_job_idx'",
   );
   if (!index.rows[0]) throw new Error("Generation job events index is missing.");
+}
+
+async function verifyGenerationJobEventFailureCodesSchema(client) {
+  await verifyGenerationJobEventsSchema(client);
+  const column = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'generation_job_events' AND column_name = 'error_code'",
+  );
+  if (!column.rows[0]) throw new Error("Generation job event failure code column is missing.");
 }

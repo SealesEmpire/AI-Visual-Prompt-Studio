@@ -37,7 +37,7 @@ export async function GET(
     if (!job.rows[0]) return NextResponse.json({ error: "GENERATION_JOB_NOT_FOUND" }, { status: 404 });
 
     const result = await pool.query(
-      `SELECT id::text, previous_status, status, created_at
+      `SELECT id::text, previous_status, status, error_code, created_at
        FROM generation_job_events
        WHERE generation_job_id = $1 AND owner_id = $2
          AND ($3::bigint IS NULL OR id < $3::bigint)
