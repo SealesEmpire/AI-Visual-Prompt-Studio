@@ -9,6 +9,7 @@ import type {
   ProviderCapabilities,
   ProviderHealth,
 } from "@/lib/providers/registry";
+import { createModelCapabilityRecord } from "@/lib/providers/model-capability";
 import { createHash, randomUUID } from "node:crypto";
 import { assetStorageProvider } from "@/lib/storage/s3";
 import { validateGeneratedAsset } from "@/lib/media/generated-asset-validation";
@@ -111,11 +112,32 @@ export class OpenAIImageGenerationProvider implements GenerationProvider {
 
   constructor(private readonly config: OpenAIConfiguration) {}
 
-  async discover(): Promise<Pick<ProviderHealth, "available" | "capabilities" | "models">> {
+  async discover(): Promise<Pick<
+    ProviderHealth,
+    "available" | "capabilities" | "models" | "modelCapabilities"
+  >> {
     const models = await listModels(this.config);
     const imageModel = this.config.imageModel;
     const available = Boolean(imageModel && models.includes(imageModel));
-    return { available, capabilities: this.capabilities, models };
+    return {
+      available,
+      capabilities: this.capabilities,
+      models,
+      modelCapabilities: imageModel
+        ? [createModelCapabilityRecord({
+          providerId: this.id,
+          modelId: imageModel,
+          adapterVersion: "1",
+          capabilities: available ? this.capabilities : null,
+          verificationStatus: available ? "DECLARED" : "UNAVAILABLE",
+          inputFormats: ["text"],
+          outputFormats: ["image/png"],
+          maximumReferenceCount: 0,
+          allowedDimensions: ["1024x1024", "1024x1536", "1536x1024"],
+          supportsMask: false,
+        })]
+        : [],
+    };
   }
 
   async generate(
@@ -218,6 +240,33 @@ export async function openAIProviderHealth(
       },
       capabilitySource: "provider_discovery",
       models,
+      modelCapabilities: config.imageModel
+        ? [createModelCapabilityRecord({
+          providerId: "openai",
+          modelId: config.imageModel,
+          adapterVersion: "1",
+          capabilities: models.includes(config.imageModel)
+            ? {
+              imageGeneration: true,
+              imageEditing: false,
+              textToVideo: false,
+              imageToVideo: false,
+              videoToVideo: false,
+              lora: false,
+              multipleLoras: false,
+              seed: false,
+              negativePrompt: false,
+              referenceImage: false,
+            }
+            : null,
+          verificationStatus: models.includes(config.imageModel) ? "DECLARED" : "UNAVAILABLE",
+          inputFormats: ["text"],
+          outputFormats: ["image/png"],
+          maximumReferenceCount: 0,
+          allowedDimensions: ["1024x1024", "1024x1536", "1536x1024"],
+          supportsMask: false,
+        })]
+        : [],
       checkedAt: new Date().toISOString(),
     };
   } catch (error) {
@@ -228,6 +277,15 @@ export async function openAIProviderHealth(
       available: false,
       status: "ERROR",
       capabilities: null,
+      modelCapabilities: config.imageModel
+        ? [createModelCapabilityRecord({
+          providerId: "openai",
+          modelId: config.imageModel,
+          adapterVersion: "1",
+          capabilities: null,
+          verificationStatus: "UNKNOWN",
+        })]
+        : [],
       checkedAt: new Date().toISOString(),
       error: safeError(error),
     };

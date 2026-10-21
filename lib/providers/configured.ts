@@ -13,6 +13,7 @@ import {
   ProviderRegistry,
   type ProviderHealth,
 } from "@/lib/providers/registry";
+import { createModelCapabilityRecord } from "@/lib/providers/model-capability";
 
 export function configuredProviderRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
@@ -54,6 +55,15 @@ export async function discoverProviderHealth(): Promise<ProviderHealth[]> {
         capabilities: discovery.capabilities,
         capabilitySource: "operator_configuration",
         models: discovery.models,
+        modelCapabilities: (discovery.models ?? []).map((modelId) =>
+          createModelCapabilityRecord({
+            providerId: provider.id,
+            modelId,
+            adapterVersion: "1",
+            capabilities: discovery.capabilities,
+            verificationStatus: "DECLARED",
+          }),
+        ),
         installedPresetIds: discovery.installedPresetIds,
         checkedAt: new Date().toISOString(),
       });
@@ -65,6 +75,15 @@ export async function discoverProviderHealth(): Promise<ProviderHealth[]> {
         available: false,
         status: "ERROR",
         capabilities: null,
+        modelCapabilities: (provider.capabilities.supportedModels ?? []).map((modelId) =>
+          createModelCapabilityRecord({
+            providerId: provider.id,
+            modelId,
+            adapterVersion: "1",
+            capabilities: provider.capabilities,
+            verificationStatus: "UNAVAILABLE",
+          }),
+        ),
         checkedAt: new Date().toISOString(),
         error: "RunPod endpoint health check failed.",
       });

@@ -1,4 +1,5 @@
 import type { GenerationConfiguration, GeneratedAsset, GenerationJob } from "@/types/application";
+import type { ModelCapabilityRecord } from "@/lib/providers/model-capability";
 
 export interface ProviderCapabilities {
   imageGeneration: boolean;
@@ -26,6 +27,7 @@ export interface ProviderHealth {
   available: boolean | null;
   status: ProviderStatus;
   capabilities: ProviderCapabilities | null;
+  modelCapabilities?: ModelCapabilityRecord[];
   models?: string[];
   installedPresetIds?: string[];
   capabilitySource?: "provider_discovery" | "operator_configuration" | "unknown";
@@ -47,7 +49,10 @@ export interface GenerationProvider {
     context?: { ownerId: string; configuration: GenerationConfiguration },
   ): Promise<GenerationJob>;
   cancel?(providerJobId: string): Promise<void>;
-  discover?(): Promise<Pick<ProviderHealth, "available" | "capabilities" | "models" | "installedPresetIds">>;
+  discover?(): Promise<Pick<
+    ProviderHealth,
+    "available" | "capabilities" | "models" | "installedPresetIds" | "modelCapabilities"
+  >>;
   getAsset?(jobId: string): Promise<GeneratedAsset | null>;
 }
 
