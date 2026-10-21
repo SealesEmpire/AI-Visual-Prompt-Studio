@@ -49,7 +49,10 @@ export function createModelCapabilityRecord(input: {
   if (!input.providerId || !input.modelId || !input.adapterVersion) {
     throw new Error("MODEL_CAPABILITY_IDENTITY_REQUIRED");
   }
-  if (input.verificationStatus === "VERIFIED" && !input.verifiedAt) {
+  if (
+    input.verificationStatus === "VERIFIED" &&
+    (!input.verifiedAt || !Number.isFinite(Date.parse(input.verifiedAt)))
+  ) {
     throw new Error("VERIFIED_CAPABILITY_REQUIRES_TIMESTAMP");
   }
 

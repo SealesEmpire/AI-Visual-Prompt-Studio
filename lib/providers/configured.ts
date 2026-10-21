@@ -81,7 +81,7 @@ export async function discoverProviderHealth(): Promise<ProviderHealth[]> {
             modelId,
             adapterVersion: "1",
             capabilities: provider.capabilities,
-            verificationStatus: "UNAVAILABLE",
+            verificationStatus: "DECLARED",
           }),
         ),
         checkedAt: new Date().toISOString(),

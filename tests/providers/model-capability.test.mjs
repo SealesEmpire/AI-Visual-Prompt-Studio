@@ -63,4 +63,15 @@ test("requires a timestamp before a capability may be marked verified", () => {
     }),
     { message: "VERIFIED_CAPABILITY_REQUIRES_TIMESTAMP" },
   );
+  assert.throws(
+    () => createModelCapabilityRecord({
+      providerId: "openai",
+      modelId: "configured-image-model",
+      adapterVersion: "1",
+      capabilities: imageCapabilities,
+      verificationStatus: "VERIFIED",
+      verifiedAt: "not-a-timestamp",
+    }),
+    { message: "VERIFIED_CAPABILITY_REQUIRES_TIMESTAMP" },
+  );
 });
