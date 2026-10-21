@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PromptArtifact } from "@/types/application";
-import { validatePromptQualityEvaluation } from "@/lib/prompts/quality";
+import { validatePromptQualityEvaluation } from "./quality.ts";
 
 export interface PromptRevisionContent {
   projectId?: string;
