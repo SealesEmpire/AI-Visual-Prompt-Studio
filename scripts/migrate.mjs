@@ -16,6 +16,7 @@ const migrations = [
   "004_generation_job_events",
   "005_generation_job_event_failure_codes",
   "006_prompt_revisions",
+  "007_prompt_quality_evaluations",
 ];
 const requiredTables = [
   "users", "projects", "media_assets", "visual_analyses", "prompt_artifacts",
@@ -58,6 +59,7 @@ try {
           if (version === "004_generation_job_events") await verifyGenerationJobEventsSchema(client);
           if (version === "005_generation_job_event_failure_codes") await verifyGenerationJobEventFailureCodesSchema(client);
           if (version === "006_prompt_revisions") await verifyPromptRevisionsSchema(client);
+          if (version === "007_prompt_quality_evaluations") await verifyPromptQualitySchema(client);
           await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         } else if (version === "001_phase3") {
           await verifySchema(client);
@@ -69,8 +71,10 @@ try {
           await verifyGenerationJobEventsSchema(client);
         } else if (version === "005_generation_job_event_failure_codes") {
           await verifyGenerationJobEventFailureCodesSchema(client);
-        } else {
+        } else if (version === "006_prompt_revisions") {
           await verifyPromptRevisionsSchema(client);
+        } else {
+          await verifyPromptQualitySchema(client);
         }
       }
       await client.query("COMMIT");
@@ -183,4 +187,11 @@ async function verifyPromptRevisionsSchema(client) {
     "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'prompt_revisions_owner_artifact_idx'",
   );
   if (!index.rows[0]) throw new Error("Prompt revisions index is missing.");
+}
+
+async function verifyPromptQualitySchema(client) {
+  const column = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'prompt_artifacts' AND column_name = 'quality_evaluation'",
+  );
+  if (!column.rows[0]) throw new Error("Prompt quality evaluation column is missing.");
 }

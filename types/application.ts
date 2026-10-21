@@ -1,4 +1,5 @@
 import type { PresetVariant } from "@/lib/presets/registry";
+import type { PromptQualityEvaluation } from "@/lib/prompts/quality";
 
 export type MediaKind = "image" | "video";
 
@@ -21,6 +22,7 @@ export interface PromptArtifact {
   goal?: string;
   createdAt: string;
   analysis?: VisualAnalysis;
+  quality?: PromptQualityEvaluation;
   editingIntent?: {
     preserve: string[];
     change: string[];

@@ -14,7 +14,7 @@ export class PostgresPromptRepository implements PromptRepository {
     const pool = getPostgresPool();
     if (!pool) throw new Error("DATABASE_NOT_CONFIGURED");
     const result = await pool.query(
-      `SELECT id, project_id, media_asset_id, prompt, goal, analysis, editing_intent, created_at
+      `SELECT id, project_id, media_asset_id, prompt, goal, analysis, quality_evaluation, editing_intent, created_at
        FROM prompt_artifacts WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 200`,
       [ownerId],
     );
@@ -26,6 +26,7 @@ export class PostgresPromptRepository implements PromptRepository {
       ...(row.goal ? { goal: row.goal } : {}),
       createdAt: new Date(row.created_at).toISOString(),
       ...(row.analysis ? { analysis: row.analysis } : {}),
+      ...(row.quality_evaluation ? { quality: row.quality_evaluation } : {}),
       ...(row.editing_intent ? { editingIntent: row.editing_intent } : {}),
     }));
   }
@@ -38,11 +39,12 @@ export class PostgresPromptRepository implements PromptRepository {
       await client.query("BEGIN");
       const saved = await client.query(
         `INSERT INTO prompt_artifacts
-          (id, owner_id, project_id, media_asset_id, prompt, goal, analysis, editing_intent, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
+          (id, owner_id, project_id, media_asset_id, prompt, goal, analysis, quality_evaluation, editing_intent, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
          ON CONFLICT (id) DO UPDATE
          SET prompt = EXCLUDED.prompt, goal = EXCLUDED.goal,
-             analysis = EXCLUDED.analysis, editing_intent = EXCLUDED.editing_intent,
+             analysis = EXCLUDED.analysis, quality_evaluation = EXCLUDED.quality_evaluation,
+             editing_intent = EXCLUDED.editing_intent,
              project_id = EXCLUDED.project_id, media_asset_id = EXCLUDED.media_asset_id
          WHERE prompt_artifacts.owner_id = EXCLUDED.owner_id
          RETURNING id`,
@@ -54,6 +56,7 @@ export class PostgresPromptRepository implements PromptRepository {
           prompt.prompt,
           prompt.goal ?? null,
           prompt.analysis ? JSON.stringify(prompt.analysis) : null,
+          prompt.quality ? JSON.stringify(prompt.quality) : null,
           prompt.editingIntent ? JSON.stringify(prompt.editingIntent) : null,
           prompt.createdAt,
         ],

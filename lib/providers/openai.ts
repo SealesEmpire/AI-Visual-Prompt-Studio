@@ -10,6 +10,10 @@ import type {
   ProviderHealth,
 } from "@/lib/providers/registry";
 import { createModelCapabilityRecord } from "@/lib/providers/model-capability";
+import {
+  validatePromptQualityEvaluation,
+  type PromptQualityEvaluation,
+} from "@/lib/prompts/quality";
 import { createHash, randomUUID } from "node:crypto";
 import { assetStorageProvider } from "@/lib/storage/s3";
 import { validateGeneratedAsset } from "@/lib/media/generated-asset-validation";
@@ -41,6 +45,7 @@ export interface PromptArchitectInput {
 
 export interface PromptArchitectResult {
   prompt: string;
+  quality: PromptQualityEvaluation;
   editingIntent?: {
     preserve: string[];
     change: string[];
@@ -81,6 +86,8 @@ export class OpenAIPromptArchitect implements PromptArchitectService {
         type: "text",
         text: [
           "Create one production-ready generation prompt. Return JSON with a non-empty prompt string.",
+          "Also return quality with rubricVersion 1.0, scores for clarity, composition, consistency, completeness, and modelCompatibility (each score is an integer 0-100 with a concise rationale), plus exactly 8 actionable improvements.",
+          "Each improvement must include a unique id, category, short title, promptAddition (a concise text fragment that can be inserted independently into the prompt), and rationale. Suggestions are optional creative choices; do not invent facts or claim a score guarantees image quality.",
           "For image output, structure the result around objective, subject, requested changes, composition, environment, lighting, camera, color, materials, texture, style, mood, and output requirements.",
           "For video output, structure around objective, subject, action, environment, camera movement, framing, lighting, motion, pacing, continuity, style, and ending.",
           "When hasSourceMedia is true, also return editingIntent with string arrays preserve, change, add, remove, style, and a finalResult string.",
@@ -373,7 +380,8 @@ function validatePromptResult(value: unknown, hasSourceMedia: boolean): PromptAr
   if (!isRecord(value) || typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > 20_000) {
     throw new Error("AI_PROVIDER_INVALID_PROMPT");
   }
-  if (!hasSourceMedia) return { prompt: value.prompt.trim() };
+  const quality = validatePromptQualityEvaluation(value.quality);
+  if (!hasSourceMedia) return { prompt: value.prompt.trim(), quality };
   if (!isRecord(value.editingIntent) ||
       !isStringArray(value.editingIntent.preserve) || value.editingIntent.preserve.length > 100 ||
       !isStringArray(value.editingIntent.change) || value.editingIntent.change.length > 100 ||
@@ -385,6 +393,7 @@ function validatePromptResult(value: unknown, hasSourceMedia: boolean): PromptAr
   }
   return {
     prompt: value.prompt.trim(),
+    quality,
     editingIntent: {
       preserve: value.editingIntent.preserve,
       change: value.editingIntent.change,

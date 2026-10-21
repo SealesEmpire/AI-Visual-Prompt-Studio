@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "@/lib/auth/service";
 import { PostgresPromptRepository } from "@/lib/storage/prompt-repository";
 import { getPostgresPool } from "@/lib/database/postgres";
 import type { PromptArtifact } from "@/types/application";
+import { validatePromptQualityEvaluation } from "@/lib/prompts/quality";
 
 export async function GET(request: Request) {
   const user = await getAuthenticatedUser(request);
@@ -32,6 +33,14 @@ export async function POST(request: Request) {
       (body.sourceAssetId !== undefined && (typeof body.sourceAssetId !== "string" || !isUuid(body.sourceAssetId)))) {
     return NextResponse.json({ error: "INVALID_PROMPT_ARTIFACT" }, { status: 400 });
   }
+  let quality: PromptArtifact["quality"];
+  if (body.quality !== undefined) {
+    try {
+      quality = validatePromptQualityEvaluation(body.quality);
+    } catch {
+      return NextResponse.json({ error: "INVALID_PROMPT_QUALITY" }, { status: 400 });
+    }
+  }
   const prompt: PromptArtifact = {
     id: body.id,
     ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
@@ -39,6 +48,7 @@ export async function POST(request: Request) {
     prompt: body.prompt.trim(),
     createdAt: new Date(body.createdAt).toISOString(),
     ...(typeof body.goal === "string" ? { goal: body.goal } : {}),
+    ...(quality ? { quality } : {}),
   };
   try {
     const pool = getPostgresPool();

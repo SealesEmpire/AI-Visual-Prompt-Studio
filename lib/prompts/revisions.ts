@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PromptArtifact } from "@/types/application";
+import { validatePromptQualityEvaluation } from "@/lib/prompts/quality";
 
 export interface PromptRevisionContent {
   projectId?: string;
@@ -7,6 +8,7 @@ export interface PromptRevisionContent {
   prompt: string;
   goal?: string;
   analysis?: PromptArtifact["analysis"];
+  quality?: PromptArtifact["quality"];
   editingIntent?: PromptArtifact["editingIntent"];
 }
 
@@ -28,6 +30,7 @@ export function createPromptRevisionContent(prompt: PromptArtifact): PromptRevis
     prompt: prompt.prompt,
     ...(prompt.goal !== undefined ? { goal: prompt.goal } : {}),
     ...(prompt.analysis ? { analysis: prompt.analysis } : {}),
+    ...(prompt.quality ? { quality: prompt.quality } : {}),
     ...(prompt.editingIntent ? { editingIntent: prompt.editingIntent } : {}),
   };
 }
@@ -68,6 +71,15 @@ export function toPromptRevision(row: Record<string, unknown>): PromptRevision {
 }
 
 function isPromptRevisionContent(value: unknown): value is PromptRevisionContent {
-  return typeof value === "object" && value !== null && !Array.isArray(value) &&
-    typeof (value as Record<string, unknown>).prompt === "string";
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const content = value as Record<string, unknown>;
+  if (typeof content.prompt !== "string") return false;
+  if (content.quality !== undefined) {
+    try {
+      validatePromptQualityEvaluation(content.quality);
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }

@@ -5,6 +5,7 @@ import { MediaInput } from "@/components/media/media-input";
 import { PresetSelector } from "@/components/presets/preset-browser";
 import { PromptEditor } from "@/components/prompt/prompt-editor";
 import { browserPromptRepository } from "@/lib/storage/browser-prompts";
+import type { PromptImprovement, PromptQualityEvaluation } from "@/lib/prompts/quality";
 import type { GenerationConfiguration, GenerationJob, MediaAsset, MediaKind, Project, PromptArtifact, VisualAnalysis } from "@/types/application";
 
 type WorkspaceMode = "simple" | "pro";
@@ -27,6 +28,8 @@ export function CreateWorkspace() {
   const [isBuildingPrompt, setIsBuildingPrompt] = useState(false);
   const [analysis, setAnalysis] = useState<VisualAnalysis | undefined>();
   const [editingIntent, setEditingIntent] = useState<PromptArtifact["editingIntent"]>();
+  const [promptQuality, setPromptQuality] = useState<PromptQualityEvaluation>();
+  const [improvementStatus, setImprovementStatus] = useState<Record<string, "applied" | "dismissed">>({});
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [jobError, setJobError] = useState("");
   const [backgroundJob, setBackgroundJob] = useState(false);
@@ -140,6 +143,7 @@ export function CreateWorkspace() {
       goal: goal.trim() || undefined,
       createdAt: new Date().toISOString(),
       ...(analysis ? { analysis } : {}),
+      ...(promptQuality ? { quality: promptQuality } : {}),
       ...(editingIntent ? { editingIntent } : {}),
     };
     try {
@@ -207,14 +211,27 @@ export function CreateWorkspace() {
           hasSourceMedia: Boolean(asset),
         }),
       });
-      const result = await response.json() as { prompt?: { prompt: string; editingIntent?: PromptArtifact["editingIntent"] }; error?: string };
+      const result = await response.json() as { prompt?: { prompt: string; quality: PromptQualityEvaluation; editingIntent?: PromptArtifact["editingIntent"] }; error?: string };
       if (!response.ok || !result.prompt) throw new Error(result.error ?? "PROMPT_ARCHITECT_FAILED");
       setPrompt(result.prompt.prompt);
       setEditingIntent(result.prompt.editingIntent);
+      setPromptQuality(result.prompt.quality);
+      setImprovementStatus({});
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "PROMPT_ARCHITECT_FAILED");
     } finally {
       setIsBuildingPrompt(false);
+    }
+
+    function applyPromptImprovement(improvement: PromptImprovement) {
+      setPrompt((current) => current.trim()
+        ? `${current.trimEnd()}${/[.!?]$/.test(current.trimEnd()) ? "" : "."} ${improvement.promptAddition}`
+        : improvement.promptAddition);
+      setImprovementStatus((current) => ({ ...current, [improvement.id]: "applied" }));
+    }
+
+    function dismissPromptImprovement(improvementId: string) {
+      setImprovementStatus((current) => ({ ...current, [improvementId]: "dismissed" }));
     }
   }
 
@@ -370,7 +387,32 @@ export function CreateWorkspace() {
         <section className="workflow-card panel">
           <div className="section-title-row"><div><span className="step-index">03</span><h2>Build your prompt</h2></div><span className="optional-label">EDITABLE</span></div>
           <PromptEditor prompt={prompt} onChange={setPrompt} onSave={() => void savePrompt()} onBuild={() => void buildPrompt()} isBuilding={isBuildingPrompt} savedMessage={savedMessage} />
-        </section>
+            {promptQuality && <section className="prompt-quality" aria-label="Prompt quality evaluation">
+              <div className="prompt-quality-heading"><strong>Prompt quality</strong><span>Heuristic · rubric {promptQuality.rubricVersion}</span></div>
+              <div className="prompt-quality-scores">
+                {(Object.entries(promptQuality.scores) as Array<[keyof PromptQualityEvaluation["scores"], PromptQualityEvaluation["scores"][keyof PromptQualityEvaluation["scores"]]]>).map(([category, score]) =>
+                  <div className="prompt-quality-score" key={category}>
+                    <span>{formatQualityCategory(category)}</span>
+                    <strong>{score.score}<small>/100</small></strong>
+                    <small>{score.rationale}</small>
+                  </div>,
+                )}
+              </div>
+              <h3>Optional improvements</h3>
+              <ul className="prompt-improvements">
+                {promptQuality.improvements.map((improvement) => {
+                  const status = improvementStatus[improvement.id];
+                  return <li key={improvement.id}>
+                    <div><strong>{improvement.title}</strong><span>{formatQualityCategory(improvement.category)} · {improvement.rationale}</span><small>Suggested text: “{improvement.promptAddition}”</small></div>
+                    {status ? <span className="inline-feedback">{status === "applied" ? "Applied" : "Dismissed"}</span> : <div className="prompt-improvement-actions">
+                      <button type="button" className="button-quiet" onClick={() => applyPromptImprovement(improvement)}>Apply</button>
+                      <button type="button" className="button-quiet" onClick={() => dismissPromptImprovement(improvement.id)}>Dismiss</button>
+                    </div>}
+                  </li>;
+                })}
+              </ul>
+            </section>}
+          </section>
       </section>
 
       <aside className="create-aside">
@@ -465,4 +507,8 @@ function readDataUrl(file: File): Promise<string> {
 function formatElapsed(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+function formatQualityCategory(category: string): string {
+  return category.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
 }
